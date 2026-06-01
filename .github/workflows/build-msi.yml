@@ -45,7 +45,7 @@ jobs:
           node-version: "20"
 
       - name: Install WiX Toolset 3.14
-        run: choco install wixtoolset --version=3.14.0 --no-progress --limit-output
+        run: choco install wixtoolset --version=3.14.0 --no-progress --limit-output --force
 
       - name: Verify WiX install
         shell: bash

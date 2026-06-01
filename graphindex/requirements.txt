@@ -1,0 +1,35 @@
+# Core runtime dependencies for graphindex.
+# Install:  pip install -r requirements.txt
+# (Optional accelerators / models live in requirements-optional.txt)
+
+# --- repo scanning & ignore rules ---
+pathspec>=0.12
+
+# --- search ---
+rapidfuzz>=3.6
+numpy>=1.24
+
+# --- AST parsing (tree-sitter + grammar wheels) ---
+tree-sitter>=0.25
+tree-sitter-python>=0.23
+tree-sitter-javascript>=0.23
+tree-sitter-typescript>=0.23
+tree-sitter-go>=0.23
+tree-sitter-java>=0.23
+tree-sitter-rust>=0.23
+
+# --- API server + live streaming ---
+flask>=3.0
+flask-cors>=4.0
+flask-socketio>=5.3
+simple-websocket>=1.0
+
+# --- incremental watcher ---
+watchdog>=4.0
+
+# --- CLI / UX ---
+click>=8.1
+rich>=13.0
+
+# --- model download (GGUF) + optional remote inference ---
+huggingface-hub>=0.23

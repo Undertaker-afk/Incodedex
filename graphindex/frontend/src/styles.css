@@ -12,12 +12,17 @@ html, body, #root { height: 100%; margin: 0; }
 body { background: var(--bg); color: var(--text);
   font: 13px/1.45 -apple-system, "Segoe UI", Roboto, sans-serif; }
 
-.app { display: grid; grid-template-columns: 290px 1fr 320px; height: 100vh; }
-.left { border-right: 1px solid var(--border); display: flex; flex-direction: column;
-  background: var(--panel2); overflow: hidden; }
-.center { display: flex; flex-direction: column; min-width: 0; }
-.right { border-left: 1px solid var(--border); background: var(--panel2);
-  display: flex; flex-direction: column; min-height: 0; }
+.app { display: grid; grid-template-columns: 290px 1fr var(--right-w, 320px);
+  grid-template-areas: "left center right"; height: 100vh; }
+.app.dock-left { grid-template-columns: 290px var(--right-w, 320px) 1fr;
+  grid-template-areas: "left right center"; }
+.left { grid-area: left; border-right: 1px solid var(--border); display: flex;
+  flex-direction: column; background: var(--panel2); overflow: hidden; }
+.center { grid-area: center; display: flex; flex-direction: column; min-width: 0; }
+.right { grid-area: right; border-left: 1px solid var(--border); background: var(--panel2);
+  display: flex; flex-direction: column; min-height: 0; min-width: 240px;
+  position: relative; }
+.right.dock-left { border-left: none; border-right: 1px solid var(--border); }
 .right-content { flex: 1; overflow-y: auto; min-height: 0; }
 
 /* sidebar */
@@ -100,6 +105,14 @@ button:disabled { opacity: .55; cursor: default; }
 .tab { flex: 1; border: none; border-radius: 0; background: var(--panel2);
   color: var(--muted); padding: 9px; border-bottom: 2px solid transparent; }
 .tab.on { color: #fff; border-bottom-color: var(--accent); background: var(--panel); }
+.dock-btn { border: none; background: var(--panel2); color: var(--muted);
+  padding: 9px 10px; border-left: 1px solid var(--border); cursor: pointer; }
+.dock-btn:hover { color: #fff; }
+
+.resize-handle { position: absolute; top: 0; bottom: 0; width: 8px; left: -4px;
+  cursor: col-resize; background: transparent; }
+.right.dock-left .resize-handle { left: auto; right: -4px; }
+.resize-handle:hover { background: #1f6feb22; }
 
 /* ask panel */
 .ask { padding: 14px; }

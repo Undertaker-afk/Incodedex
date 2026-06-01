@@ -32,6 +32,7 @@ def create_app(cfg: Config):
         cors_allowed_origins="*",
         async_mode="threading",
         allow_upgrades=False,
+        transports=["polling"],
     )
 
     state = AppState(cfg)

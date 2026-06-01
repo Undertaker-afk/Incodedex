@@ -35,7 +35,7 @@ export const api = {
 }
 
 export function connectSocket(onEvent, onHello) {
-  const socket = io(BASE || '/', { transports: ['polling', 'websocket'] })
+  const socket = io(BASE || '/', { transports: ['polling'], upgrade: false })
   socket.on('index_event', onEvent)
   if (onHello) socket.on('hello', onHello)
   return socket
@@ -43,7 +43,7 @@ export function connectSocket(onEvent, onHello) {
 
 // Separate listener for extended_ask streaming (the "ext_event" channel).
 export function connectExtSocket(onEvent) {
-  const socket = io(BASE || '/', { transports: ['polling', 'websocket'] })
+  const socket = io(BASE || '/', { transports: ['polling'], upgrade: false })
   socket.on('ext_event', onEvent)
   return socket
 }

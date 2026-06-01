@@ -1,5 +1,5 @@
 # Incodedex
-
+### WIP CURRENTLY UNDER FIX
 A high-speed, local-model **codebase indexer** with a live-updating knowledge
 graph, semantic/regex/fuzzy search, code intelligence, and a grounded
 "ask the codebase" assistant — powered by **Qwen3-Embedding-0.6B** and

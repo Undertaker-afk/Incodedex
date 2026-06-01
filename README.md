@@ -14,3 +14,4 @@ python -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt && pip install -e .
 graphindex serve .            # live WebUI + API at http://localhost:8000
 ```
+$env:GRAPHINDEX_BACKEND="llamacpp" ; $env:LLAMA_CUDA=0 ; $env:GRAPHINDEX_LOG_LEVEL="INFO" ; $env:GRAPHINDEX_LLAMA_LOG="warn" ; python .\graphindex\graphindex\cli.py serve graphindex/ --watch | tee log.txt

@@ -1,9 +1,9 @@
 """Flask + SocketIO application factory.
 
 Serves the REST API (``routes.bp``), streams indexing events over SocketIO so
-the WebUI grows node-by-node, and — when a built frontend is present in
-``frontend/dist`` — serves the single-page app. The index run executes in a
-background thread; its :class:`EventBus` is bridged to SocketIO.
+the WebUI grows node-by-node, and — when a built frontend is bundled in
+``graphindex/frontend_dist/`` — serves the single-page app. The index run
+executes in a background thread; its :class:`EventBus` is bridged to SocketIO.
 """
 
 from __future__ import annotations
@@ -21,7 +21,30 @@ from ..pipeline.orchestrator import Indexer
 from .routes import bp
 from .state import AppState
 
-_FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+
+def _resolve_frontend_dist() -> Path | None:
+    """Locate the bundled React SPA ``dist/`` directory.
+
+    Looks for ``frontend_dist/`` in the installed package via
+    :mod:`importlib.resources` so it works after ``pip install`` (no source
+    checkout required). Falls back to the source-tree path
+    ``<repo>/frontend/dist`` for editable installs / dev runs.
+    """
+    # 1) Installed package: graphindex.frontend_dist  (package data)
+    try:
+        import importlib.resources as ilr
+        ref = ilr.files("graphindex").joinpath("frontend_dist", "index.html")
+        if ref.is_file():
+            # `index.html` is at the root of the bundle; return the parent dir.
+            return Path(str(ref.parent))
+    except Exception:
+        pass
+    # 2) Source-tree fallback (editable install / dev): the layout has the
+    # `frontend/` dir as a sibling of the `graphindex/` package dir.
+    return Path(__file__).resolve().parents[2] / "frontend" / "dist"
+
+
+_FRONTEND_DIST = _resolve_frontend_dist()
 
 
 def create_app(cfg: Config):

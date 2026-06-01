@@ -71,6 +71,10 @@ include = ["graphindex*"]
 # Non-Python files that must ship inside the wheel so installed users
 # can run the package without a source checkout.
 "graphindex.storage" = ["schema.sql"]
+# React SPA bundle produced by `npm run build` in frontend/. The installer
+# copies frontend/dist/ into graphindex/frontend_dist/ before building the
+# wheel so the server can find it via importlib.resources.
+"graphindex" = ["frontend_dist/*", "frontend_dist/assets/*", "frontend_dist/assets/**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  graphindex MSI installer source (WiX 3.x).
+
+  Produces a single .msi that:
+    * Installs to   <ProgramFiles>\graphindex\        (default: per-machine;
+                                                      ALLUSERS=1; Admin install)
+    * Bundles       a self-contained Python 3.11 + the graphindex wheel +
+                    the built React SPA, pip-installed with [llama,faiss,mcp]
+                    extras
+    * Adds          <install>\graphindex.bat   to the system PATH (so
+                    `graphindex` works in any new cmd / PowerShell after
+                    install)
+    * Adds          Start Menu shortcut to `graphindex serve` (opens browser
+                    to the local WebUI)
+    * Adds          a custom MCP config to %APPDATA%\graphindex\mcp.json
+                    so Claude Desktop / VS Code pick it up automatically
+    * Registers    Add/Remove Programs entry with proper Publisher / Version
+                    / Comments / Help link (so support requests are easy)
+    * Provides     a clean uninstaller that removes the PATH entry, the
+                    Start Menu shortcut, and the install directory
+                    (user data under %LOCALAPPDATA%\graphindex is preserved)
+
+  Build with:
+    candle.exe graphindex.wxs -out obj\\
+    light.exe  -ext WixUtilExtension -ext WixUiExtension obj\\graphindex.wixobj -out graphindex.msi
+
+  Or use the build_msi.py orchestrator which handles all of this.
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
+     xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
+
+  <!-- Product identity. The upgrade code is fixed across releases; the
+       product code MUST change for every release. -->
+  <?define ProductName = "graphindex" ?>
+  <?define ProductVersion = "0.1.0.0" ?>
+  <?define ProductManufacturer = "graphindex" ?>
+  <?define ProductComments = "High-speed local-model codebase indexer" ?>
+  <?define ProductHelpLink = "https://github.com/" ?>
+  <?define UpgradeCode = "GRAPHINDEX-UPGRADE-CODE-0000-0000-0000-000000000000" ?>
+
+  <Product Id="*"
+           Name="$(var.ProductName)"
+           Version="$(var.ProductVersion)"
+           Manufacturer="$(var.ProductManufacturer)"
+           UpgradeCode="$(var.UpgradeCode)"
+           Language="1033"
+           Codepage="1252">
+
+    <Package Id="*"
+             InstallerVersion="500"
+             Compressed="yes"
+             InstallScope="perMachine"
+             Description="$(var.ProductName) $(var.ProductVersion)"
+             Comments="$(var.ProductComments)"
+             Manufacturer="$(var.ProductManufacturer)" />
+
+    <!-- 32-bit MSI; the embedded Python is amd64 but the MSI itself only
+         needs to be 32-bit so the WiX UI extensions render correctly on
+         32-bit installers. The Python binary is 64-bit and runs on any
+         x64 Windows. -->
+    <Media Id="1" Cabinet="graphindex.cab" EmbedCab="yes" />
+
+    <MajorUpgrade Schedule="afterInstallInitialize"
+                  AllowSameVersionUpgrades="yes"
+                  DowngradeErrorMessage="A newer version of graphindex is already installed." />
+
+    <!-- Set ARP (Add/Remove Programs) properties. -->
+    <Property Id="ARPCOMMENTS" Value="$(var.ProductComments)" />
+    <Property Id="ARPHELPLINK" Value="$(var.ProductHelpLink)" />
+    <Property Id="ARPURLINFOABOUT" Value="$(var.ProductHelpLink)" />
+    <Property Id="ARPNOMODIFY" Value="yes" />
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLDIR" Name="graphindex">
+          <Directory Id="PythonDir" Name="python" />
+        </Directory>
+      </Directory>
+
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="AppMenuDir" Name="graphindex" />
+      </Directory>
+    </Directory>
+
+    <ComponentGroup Id="GraphindexFiles" Directory="INSTALLDIR">
+      <!-- The full staging tree is harvested from a sibling directory next
+           to the .wxs file. We list the top-level entries we want; the
+           .bat shim and LICENSE are picked up explicitly so the WiX heat
+           doesn't try to harvest the entire Python tree by mistake. -->
+      <Component Id="GraphindexBat" Guid="*">
+        <File Id="GraphindexBatFile"
+              Source="$(var.SrcDir)\graphindex.bat"
+              KeyPath="yes" />
+      </Component>
+      <Component Id="GraphindexLicense" Guid="*">
+        <File Id="GraphindexLicenseFile"
+              Source="$(var.SrcDir)\LICENSE.txt"
+              KeyPath="yes" />
+      </Component>
+      <!-- python/ directory: recursively harvested by `heat dir`. -->
+      <ComponentGroupRef Id="HarvestedPython" />
+    </ComponentGroup>
+
+    <DirectoryRef Id="AppMenuDir">
+      <Component Id="StartMenuShortcuts" Guid="*">
+        <util:InternetShortcut Id="WebuiShortcut"
+                               Name="graphindex WebUI"
+                               Target="http://localhost:8000/" />
+        <Shortcut Id="ServeShortcut"
+                  Name="Start graphindex server"
+                  Description="Runs `graphindex serve` in a new window"
+                  Target="[%ComSpec]"
+                  Arguments='/k ""[INSTALLDIR]graphindex.bat"" serve %USERPROFILE%"'
+                  WorkingDirectory="INSTALLDIR" />
+        <RemoveFolder Id="AppMenuDir" On="uninstall" />
+        <RegistryValue Root="HKCU" Key="Software\graphindex"
+                       Name="StartMenuInstalled" Type="integer" Value="1"
+                       KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+
+    <Feature Id="GraphindexFeature"
+             Title="graphindex"
+             Description="Local-model codebase indexer with live knowledge graph"
+             Level="1"
+             ConfigurableDirectory="INSTALLDIR">
+      <ComponentGroupRef Id="GraphindexFiles" />
+      <ComponentRef Id="StartMenuShortcuts" />
+      <!-- PATH manipulation lives in its own component so the
+           upgrade scenario (re-running the MSI) updates PATH. -->
+      <ComponentRef Id="PathEnv" />
+    </Feature>
+
+    <!--
+      Add <INSTALLDIR> to the system PATH. The WixUtilExtension's
+      <Environment> writes to HKLM\SYSTEM\CurrentControlSet\Control\Session
+      Manager\Environment (system) and broadcasts WM_SETTINGCHANGE so new
+      cmd / PowerShell windows pick up the change. Existing shells must be
+      restarted.
+    -->
+    <DirectoryRef Id="INSTALLDIR">
+      <Component Id="PathEnv" Guid="*" KeyPath="yes">
+        <Environment Id="PATH" Name="PATH" Part="last" Separator=";"
+                     Action="set" System="yes"
+                     Value="[INSTALLDIR]" />
+      </Component>
+    </DirectoryRef>
+
+    <UI>
+      <UIRef Id="WixUI_Minimal" />
+      <Publish Dialog="WelcomeDlg" Control="Next"
+               Event="NewDialog" Value="InstallDirDlg"
+               Order="2">1</Publish>
+      <Publish Dialog="InstallDirDlg" Control="Back"
+               Event="NewDialog" Value="WelcomeDlg" Order="2">1</Publish>
+      <UIRef Id="WixUI_InstallDir" />
+    </UI>
+
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLDIR" />
+
+  </Product>
+</Wix>

@@ -136,6 +136,10 @@ class Indexer:
                                 rec.sha, self.commit)
             self.bus.emit(E.PROGRESS, phase="parse", done=i, total=total,
                           current=rec.rel_path)
+        # Release the write lock acquired by the per-file upserts so other
+        # writers (the watcher thread, a concurrent API-driven re-index) don't
+        # have to wait for the full embed/summarize pass to finish.
+        self.db.commit()
 
         # Flush CompSrc batch after parsing
         self.compsrc.flush_batch()

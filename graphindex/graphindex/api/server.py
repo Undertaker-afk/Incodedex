@@ -27,7 +27,12 @@ _FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 def create_app(cfg: Config):
     app = Flask(__name__, static_folder=None)
     CORS(app)
-    socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
+    socketio = SocketIO(
+        app,
+        cors_allowed_origins="*",
+        async_mode="threading",
+        allow_upgrades=False,
+    )
 
     state = AppState(cfg)
     app.config["GRAPHINDEX_STATE"] = state

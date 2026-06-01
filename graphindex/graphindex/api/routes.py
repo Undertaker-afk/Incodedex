@@ -135,6 +135,20 @@ def node_source(node_id):
         n = st.db.get_node(node_id)
         if n and n.code:
             source = n.code
+        elif n and n.kind == NodeKind.FILE.value and n.path:
+            # File nodes never carry an inline `code` payload. If the compsrc
+            # cache wasn't populated for them (e.g. the index was built before
+            # files were added to the cache), read the file from disk as a
+            # last resort so the editor still has something to show.
+            try:
+                repo_root = st.cfg.repo_path
+                on_disk = (repo_root / n.path).resolve()
+                repo_root_resolved = repo_root.resolve()
+                if (repo_root_resolved in on_disk.parents
+                        or on_disk == repo_root_resolved) and on_disk.is_file():
+                    source = on_disk.read_text(encoding="utf-8", errors="replace")
+            except (OSError, ValueError):
+                source = None
 
     if source is None:
         return jsonify({"error": "source not found"}), 404

@@ -3,9 +3,21 @@ import { io } from 'socket.io-client'
 
 const BASE = '' // same origin
 
+async function readBody(r) {
+  const text = await r.text()
+  if (!text) return null
+  try { return JSON.parse(text) } catch { return { raw: text } }
+}
+
 export async function getJSON(path) {
   const r = await fetch(BASE + path)
-  if (!r.ok) throw new Error(`${path} -> ${r.status}`)
+  if (!r.ok) {
+    const body = await readBody(r)
+    const err = new Error(`${path} -> ${r.status}`)
+    err.status = r.status
+    err.body = body
+    throw err
+  }
   return r.json()
 }
 
@@ -15,7 +27,14 @@ export async function postJSON(path, body) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body || {}),
   })
-  return r.json()
+  const data = await readBody(r)
+  if (!r.ok) {
+    const err = new Error(`${path} -> ${r.status}`)
+    err.status = r.status
+    err.body = data
+    throw err
+  }
+  return data
 }
 
 export const api = {

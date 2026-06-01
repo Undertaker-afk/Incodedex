@@ -21,6 +21,9 @@ from pathlib import Path
 
 import click
 from rich.console import Console
+from rich.progress import (
+    BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn,
+)
 from rich.table import Table
 
 try:
@@ -31,7 +34,7 @@ except ImportError:  # pragma: no cover
         sys.path.insert(0, str(root))
     from graphindex.config import load_config
 
-console = Console()
+console = Console(force_terminal=True, legacy_windows=False)
 
 
 def _env_flag(name: str, default: bool = False) -> bool:
@@ -80,22 +83,67 @@ def main() -> None:
 def index(repo, backend, no_summarize, no_embed):
     """Build/rebuild the index for REPO."""
     from graphindex.pipeline import Indexer, EventBus
+    from graphindex.pipeline.events import PROGRESS, PHASE, LOG, DONE
     cfg = _cfg(repo, backend=backend)
     bus = EventBus()
-    last = {"phase": ""}
+    # task_id per phase so each phase shows its own bar; unknown phases get a
+    # fresh task. Mutated from the bus thread, so all access goes through
+    # rich's Progress(thread_safe=True) below.
+    task_ids: dict[str, int] = {}
+    total_for: dict[str, int] = {}
+
+    progress = Progress(
+        SpinnerColumn(),
+        TextColumn("[bold cyan]{task.description}"),
+        BarColumn(bar_width=None),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        TextColumn("({task.completed}/{task.total})"),
+        TextColumn("[dim]{task.fields[current]}[/dim]"),
+        TimeElapsedColumn(),
+        console=console,
+        transient=False,
+        expand=True,
+    )
 
     def on(evt):
-        if evt.type == "phase":
-            last["phase"] = evt.payload.get("phase", "")
+        if evt.type == PHASE:
+            phase = evt.payload.get("phase", "")
             console.print(f"[cyan]▸ {evt.payload.get('message','')}[/cyan]")
-        elif evt.type == "log":
+            if phase and phase not in task_ids:
+                # open a task with an unknown total; the first PROGRESS
+                # event will set the real total
+                tid = progress.add_task(phase, total=None, current="")
+                task_ids[phase] = tid
+        elif evt.type == PROGRESS:
+            phase = evt.payload.get("phase", "")
+            done = int(evt.payload.get("done", 0))
+            total = int(evt.payload.get("total", 0))
+            current = evt.payload.get("current", "") or ""
+            if phase not in task_ids:
+                task_ids[phase] = progress.add_task(phase, total=total, current="")
+            tid = task_ids[phase]
+            # Late-arriving totals: switch the task to determinate.
+            if total and total_for.get(phase) != total:
+                total_for[phase] = total
+                progress.update(tid, total=total)
+            progress.update(tid, completed=done, current=current[:60])
+        elif evt.type == LOG:
             console.print(f"  {evt.payload.get('message','')}")
+        elif evt.type == DONE:
+            # leave the bar visible; the table printed below shows the final
+            # numbers cleanly. Stop the live display so the table aligns.
+            progress.stop()
 
     bus.subscribe(on)
     console.print(f"[bold]Indexing[/bold] {cfg.repo_path}  (backend={cfg.backend})")
     ix = Indexer(cfg, bus=bus, do_summarize=not no_summarize, do_embed=not no_embed)
-    with console.status("working…"):
+    progress.start()
+    try:
         m = ix.index()
+    finally:
+        # If DONE never fired (crash / Ctrl-C), stop the live display so
+        # the final message doesn't interleave with the bar.
+        progress.stop()
     ix.db.close()
     t = Table(title="Index complete", show_header=False)
     for k, v in m.items():

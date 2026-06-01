@@ -2,7 +2,10 @@ import React from 'react'
 import { LEGEND } from '../colors'
 
 // Left rail: actions, live status, legend and rolling stats.
-export default function Sidebar({ config, stats, indexing, phase, logLine, onIndex, onPrune }) {
+export default function Sidebar({ config, stats, indexing, phase, logLine, progress, onIndex, onPrune }) {
+  const pct = progress && progress.total
+    ? Math.min(100, Math.round((progress.done / progress.total) * 100))
+    : 0
   return (
     <div className="sidebar">
       <div className="brand">graphindex</div>
@@ -17,6 +20,20 @@ export default function Sidebar({ config, stats, indexing, phase, logLine, onInd
 
       {indexing && <div className="phase">▸ {phase}</div>}
       {logLine && <div className="logline">{logLine}</div>}
+
+      {indexing && progress && (
+        <div className="progress">
+          <div className="bar" role="progressbar"
+            aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+            <div className="fill" style={{ width: `${pct}%` }} />
+          </div>
+          <div className="prow">
+            <span>{progress.phase}</span>
+            <span>{progress.done}/{progress.total} ({pct}%)</span>
+          </div>
+          {progress.current && <div className="pcurrent" title={progress.current}>{progress.current}</div>}
+        </div>
+      )}
 
       <div className="legend">
         <h4>Node states</h4>

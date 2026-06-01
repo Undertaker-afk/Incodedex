@@ -37,6 +37,17 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
 button:disabled { opacity: .55; cursor: default; }
 .phase { color: #f2c744; font-size: 12px; margin: 4px 0; }
 .logline { color: var(--muted); font-size: 11px; margin-bottom: 8px; }
+
+/* progress bar (live indexing) */
+.progress { margin: 6px 0 10px; }
+.progress .bar { width: 100%; height: 6px; background: var(--panel);
+  border: 1px solid var(--border); border-radius: 3px; overflow: hidden; }
+.progress .fill { height: 100%; background: var(--accent);
+  transition: width 120ms ease-out; }
+.progress .prow { display: flex; justify-content: space-between;
+  font-size: 11px; color: var(--muted); margin-top: 3px; }
+.progress .pcurrent { font-size: 10px; color: var(--muted); margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .legend { margin-top: 12px; }
 .legend h4, .statbox h4, .isec h4 { margin: 8px 0 6px; font-size: 11px; color: var(--muted);
   text-transform: uppercase; letter-spacing: .5px; }

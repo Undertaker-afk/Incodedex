@@ -9,7 +9,7 @@ import { useGraphStream } from './hooks/useGraphStream'
 import { api } from './api/client'
 
 export default function App() {
-  const { nodes, links, phase, stats, indexing, logLine } = useGraphStream()
+  const { nodes, links, phase, stats, indexing, logLine, progress } = useGraphStream()
   const [config, setConfig] = useState(null)
   const [selected, setSelected] = useState(null)
   const [tab, setTab] = useState('inspect')
@@ -56,7 +56,7 @@ export default function App() {
       style={{ '--right-w': `${sidebarWidth}px` }}>
       <div className="left">
         <Sidebar config={config} stats={stats} indexing={indexing} phase={phase}
-          logLine={logLine} onIndex={onIndex} onPrune={onPrune} />
+          logLine={logLine} progress={progress} onIndex={onIndex} onPrune={onPrune} />
         <SearchBar onSelect={(r) => selectById(r)} />
       </div>
 

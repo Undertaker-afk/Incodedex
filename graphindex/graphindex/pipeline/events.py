@@ -18,6 +18,7 @@ NODE_ADD = "node_add"          # a node first appears (gray)
 NODE_UPDATE = "node_update"    # state/colour/flags change
 EDGE_ADD = "edge_add"          # a new edge between two nodes
 PHASE = "phase"                # pipeline phase change (scan/parse/...)
+PROGRESS = "progress"          # {phase, done, total, current?} — drives progress bars
 STATS = "stats"                # rolling counters / health metrics
 LOG = "log"                    # human-readable log line
 DONE = "done"                  # indexing complete

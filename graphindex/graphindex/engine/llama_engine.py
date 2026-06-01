@@ -23,6 +23,26 @@ from . import bootstrap
 from .registry import find_existing
 
 
+# Module-level set that keeps references to all loaded llama_cpp.Llama
+# instances. The library's __del__ calls llama_free which can segfault on
+# Windows during interpreter shutdown (STATUS_ILLEGAL_INSTRUCTION,
+# 0xc000001d) with some wheels/CPU combinations. Pinning the instances
+# here prevents their refcount from reaching zero, so __del__ never runs
+# and the process can exit cleanly.
+_LIVE_MODELS: set = set()
+
+
+def _pin(model) -> None:
+    _LIVE_MODELS.add(model)
+
+
+def unpin_all() -> int:
+    """Drop references to pinned models. Returns the number released."""
+    n = len(_LIVE_MODELS)
+    _LIVE_MODELS.clear()
+    return n
+
+
 class EngineUnavailable(RuntimeError):
     """Raised when the llama.cpp runtime or required GGUFs are missing."""
 
@@ -194,6 +214,7 @@ class LlamaEngine:
             n_threads=self.cfg.n_threads, n_threads_batch=self.cfg.n_threads_batch,
             pooling_type=LLAMA_POOLING_TYPE_LAST, verbose=False,
         )
+        _pin(self._embed_model)
         return self._embed_model
 
     def _load_chat(self) -> Any:
@@ -210,6 +231,7 @@ class LlamaEngine:
             model_path=str(path), n_ctx=4096, n_threads=self.cfg.n_threads,
             n_threads_batch=self.cfg.n_threads_batch, verbose=False,
         )
+        _pin(self._chat_model)
         return self._chat_model
 
     # -- inference --------------------------------------------------------

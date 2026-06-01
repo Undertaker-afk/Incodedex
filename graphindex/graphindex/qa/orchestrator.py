@@ -87,13 +87,51 @@ _ALIASES = {
 
 
 def _extract_json(text: str) -> dict:
-    """Best-effort parse of a JSON object from an LLM reply."""
+    """Best-effort parse of a JSON object from an LLM reply.
+
+    Handles: leading prose, markdown ```json ... ``` fences, and nested
+    braces in string values (the greedy ``{.*}`` pattern breaks on
+    code-like text in the ``findings`` field).
+    """
     if not text:
         return {}
-    m = re.search(r"\{.*\}", text, re.DOTALL)
-    if not m:
+    s = text.strip()
+    # Strip common markdown code fences: ```json ... ``` or ``` ... ```
+    fence = re.search(r"```(?:json)?\s*\n(.*?)\n```", s, re.DOTALL | re.IGNORECASE)
+    if fence:
+        s = fence.group(1).strip()
+    # Locate the first '{' and the matching '}' (brace-counted) so nested
+    # braces inside string values don't trick the parser into swallowing
+    # the whole reply.
+    start = s.find("{")
+    if start < 0:
         return {}
-    blob = m.group(0)
+    depth = 0
+    in_str = False
+    escape = False
+    end = -1
+    for i in range(start, len(s)):
+        ch = s[i]
+        if in_str:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                end = i
+                break
+    if end < 0:
+        return {}
+    blob = s[start:end + 1]
     for candidate in (blob, blob.replace("\n", " ")):
         try:
             return json.loads(candidate)

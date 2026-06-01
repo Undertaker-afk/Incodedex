@@ -129,14 +129,29 @@ def _callee_name(call_node: Any, source: bytes, spec: GrammarSpec) -> str:
 def _import_modules(node: Any, source: bytes, grammar: str) -> list[str]:
     raw = node_text(node, source)
     mods: list[str] = []
+
+    # Python `from X import a, b`: only X is the module/dependency.
+    if node.type == "import_from_statement":
+        mod = node.child_by_field_name("module_name")
+        if mod is not None:
+            txt = node_text(mod, source).strip()
+            return [txt] if txt else []
+
     # dotted_name / module names live in identifier-ish descendants
     for c in node.children:
         if c.type in {"dotted_name", "scoped_identifier", "import_spec",
                       "string", "interpreted_string_literal", "string_literal",
-                      "identifier", "scoped_use_list", "use_wildcard"}:
+                      "scoped_use_list", "use_wildcard", "string_fragment"}:
             txt = node_text(c, source).strip("\"'`;")
             if txt:
                 mods.append(txt.split()[0])
+    # JS/TS `import ... from 'mod'`: take the source string.
+    if not mods and grammar in {"javascript", "typescript", "tsx"}:
+        for c in node.children:
+            if "string" in c.type:
+                txt = node_text(c, source).strip("\"'`;")
+                if txt:
+                    mods.append(txt)
     if not mods:
         # crude fallback: take token after import/from/use/require
         tokens = raw.replace(";", " ").split()

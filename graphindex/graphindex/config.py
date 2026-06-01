@@ -10,6 +10,7 @@ Configuration is resolved from (in order of precedence):
 
 from __future__ import annotations
 
+import copy
 import os
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
@@ -85,8 +86,9 @@ class Config:
     auto_install: bool = field(default_factory=lambda: _env_bool("AUTO_INSTALL", True))
     auto_download: bool = field(default_factory=lambda: _env_bool("AUTO_DOWNLOAD", True))
 
-    embed_model: ModelSpec = field(default_factory=lambda: DEFAULT_EMBED_MODEL)
-    chat_model: ModelSpec = field(default_factory=lambda: DEFAULT_CHAT_MODEL)
+    # deepcopy so each Config gets its own ModelSpec (no shared mutable state)
+    embed_model: ModelSpec = field(default_factory=lambda: copy.deepcopy(DEFAULT_EMBED_MODEL))
+    chat_model: ModelSpec = field(default_factory=lambda: copy.deepcopy(DEFAULT_CHAT_MODEL))
 
     # Embedding dimension used by the vector store (must match the embedder).
     embed_dim: int = field(default_factory=lambda: _env_int("EMBED_DIM", 1024))
@@ -105,7 +107,8 @@ class Config:
         default_factory=lambda: _env_int("THREADS_BATCH", min(os.cpu_count() or 4, 8)))
 
     # Server.
-    host: str = field(default_factory=lambda: _env("HOST", "0.0.0.0") or "0.0.0.0")
+    # Loopback by default; operators opt in to external exposure via --host/env.
+    host: str = field(default_factory=lambda: _env("HOST", "127.0.0.1") or "127.0.0.1")
     port: int = field(default_factory=lambda: _env_int("PORT", 8000))
 
     @property

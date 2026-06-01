@@ -19,17 +19,19 @@ export function useGraphStream() {
   const [logLine, setLogLine] = useState('')
   const nodeMap = useRef(new Map())
   const linkSet = useRef(new Set())
+  const linksRef = useRef([])
   const dirty = useRef(false)
 
   const commit = useCallback(() => {
     setNodes(Array.from(nodeMap.current.values()))
+    setLinks([...linksRef.current])
   }, [])
 
   const loadInitial = useCallback(async () => {
     const g = await api.graph()
     nodeMap.current = new Map(g.nodes.map((n) => [n.id, { ...n }]))
     linkSet.current = new Set(g.edges.map((e) => e.id))
-    setLinks(g.edges.map((e) => ({ ...e })))
+    linksRef.current = g.edges.map((e) => ({ ...e }))
     commit()
   }, [commit])
 
@@ -51,9 +53,12 @@ export function useGraphStream() {
           break
         }
         case 'edge_add': {
+          // batch links into a ref; the dirty-commit cycle publishes them,
+          // avoiding a synchronous React update per edge (UI freeze on big repos)
           if (!linkSet.current.has(evt.id)) {
             linkSet.current.add(evt.id)
-            setLinks((prev) => [...prev, { id: evt.id, source: evt.source, target: evt.target, kind: evt.kind, resolved: evt.resolved }])
+            linksRef.current.push({ id: evt.id, source: evt.source, target: evt.target, kind: evt.kind, resolved: evt.resolved })
+            dirty.current = true
           }
           break
         }

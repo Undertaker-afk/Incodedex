@@ -35,6 +35,8 @@ class HashingEmbedder(Embedder):
     name = "fallback-hashing"
 
     def __init__(self, dim: int = 512):
+        if not isinstance(dim, int) or dim <= 0:
+            raise ValueError("dim must be a positive integer")
         self.dim = dim
 
     def embed(self, texts: list[str]) -> np.ndarray:

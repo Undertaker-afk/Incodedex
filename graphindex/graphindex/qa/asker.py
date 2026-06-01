@@ -151,14 +151,17 @@ class AskEngine:
         context = self._context_block(references)
         user = (f"Question: {question}\n\nContext from the codebase:\n{context}\n\n"
                 "Answer with citations like [ref 1].")
+        grounded = True
         try:
             answer = self.chat.chat(_ANSWER_SYSTEM, user,
                                     max_tokens=max(256, self.cfg.summary_max_tokens * 3))
         except Exception:
+            # LLM failed -> degraded extractive answer; report it honestly
             answer = self._extractive(question, references)
             backend = "extractive"
+            grounded = bool(references)
         return Answer(question=question, answer=answer.strip(), rewritten=rewritten,
-                      references=references, backend=backend, grounded=True)
+                      references=references, backend=backend, grounded=grounded)
 
     # -- helpers -----------------------------------------------------------
     def _context_block(self, refs: list[Reference]) -> str:

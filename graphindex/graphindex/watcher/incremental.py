@@ -9,6 +9,7 @@ consumes so the live graph updates in place.
 
 from __future__ import annotations
 
+import os
 import threading
 import time
 
@@ -51,7 +52,7 @@ class RepoWatcher:
 
     def _enqueue(self, abs_path: str) -> None:
         try:
-            rel = str(__import__("os").path.relpath(abs_path, self.cfg.repo_path))
+            rel = os.path.relpath(abs_path, self.cfg.repo_path)
         except ValueError:
             return
         rel = rel.replace("\\", "/")
@@ -75,8 +76,9 @@ class RepoWatcher:
             return
         self.bus.emit("log", message=f"Incremental update: {len(changed)} file(s)")
         indexer = Indexer(self.cfg, bus=self.bus, do_summarize=self.do_summarize)
-        # prune deleted first so removals stream out, then re-index survivors
-        prune_deleted_files(self.cfg, indexer.db, indexer.vectors)
+        # 1) Handle deletions from the changed set FIRST so node_remove events are
+        #    emitted (a blanket prune first would delete the rows, leaving the
+        #    explicit loop nothing to report and the UI graph stale).
         existing = [c for c in changed if (self.cfg.repo_path / c).exists()]
         for path in changed:
             if not (self.cfg.repo_path / path).exists():
@@ -84,6 +86,8 @@ class RepoWatcher:
                 indexer.vectors.remove(set(ids))
                 for nid in ids:
                     self.bus.emit("node_remove", id=nid)
+        # 2) Catch any other files deleted outside the changed set.
+        prune_deleted_files(self.cfg, indexer.db, indexer.vectors)
         if existing:
             indexer.index(only_changed=existing)
         indexer.db.close()

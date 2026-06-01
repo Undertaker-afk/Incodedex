@@ -34,7 +34,7 @@ class VectorStore:
         self.path.mkdir(parents=True, exist_ok=True)
         self.dim = dim
         self.ids: list[str] = []
-        self._id_set: set[str] = set()
+        self._id_to_idx: dict[str, int] = {}   # O(1) membership + row lookup
         self._matrix: np.ndarray = np.zeros((0, dim), dtype="float32")
         self._index = faiss.IndexFlatIP(dim) if _HAS_FAISS else None
         self.backend = "faiss" if _HAS_FAISS else "numpy"
@@ -52,16 +52,19 @@ class VectorStore:
     def _load(self) -> None:
         if self._ids_file.exists() and self._vec_file.exists():
             try:
-                self.ids = json.loads(self._ids_file.read_text())
-                self._id_set = set(self.ids)
+                # Load the matrix FIRST and bail out on a dimension mismatch
+                # before touching id bookkeeping — otherwise ids/_id_to_idx and
+                # _matrix end up inconsistent (silent corruption / IndexError).
                 mat = np.load(self._vec_file)
                 if mat.shape[1] != self.dim and mat.size:
                     return  # dimension mismatch -> start fresh
+                self.ids = json.loads(self._ids_file.read_text())
+                self._id_to_idx = {nid: i for i, nid in enumerate(self.ids)}
                 self._matrix = mat.astype("float32")
                 if self._index is not None and len(self.ids):
                     self._index.add(self._matrix)
             except Exception:
-                self.ids, self._id_set = [], set()
+                self.ids, self._id_to_idx = [], {}
                 self._matrix = np.zeros((0, self.dim), dtype="float32")
 
     def save(self) -> None:
@@ -71,13 +74,13 @@ class VectorStore:
     # -- mutation ---------------------------------------------------------
     def add(self, node_id: str, vector: np.ndarray | list[float]) -> None:
         vec = _normalize(np.asarray(vector, dtype="float32").reshape(1, -1))
-        if node_id in self._id_set:
-            idx = self.ids.index(node_id)
+        idx = self._id_to_idx.get(node_id)
+        if idx is not None:
             self._matrix[idx] = vec[0]
             self._rebuild_faiss()
             return
+        self._id_to_idx[node_id] = len(self.ids)
         self.ids.append(node_id)
-        self._id_set.add(node_id)
         self._matrix = np.vstack([self._matrix, vec]) if self._matrix.size else vec
         if self._index is not None:
             self._index.add(vec)
@@ -87,9 +90,18 @@ class VectorStore:
             return
         keep = [i for i, nid in enumerate(self.ids) if nid not in node_ids]
         self.ids = [self.ids[i] for i in keep]
-        self._id_set = set(self.ids)
+        self._id_to_idx = {nid: i for i, nid in enumerate(self.ids)}
         self._matrix = self._matrix[keep] if keep else np.zeros((0, self.dim), dtype="float32")
         self._rebuild_faiss()
+
+    def get_vector(self, node_id: str) -> np.ndarray | None:
+        """Return the stored (normalized) vector for ``node_id`` or None.
+
+        Public accessor so callers (e.g. duplicate detection) don't reach into
+        ``_matrix``/``ids`` internals.
+        """
+        idx = self._id_to_idx.get(node_id)
+        return None if idx is None else self._matrix[idx]
 
     def _rebuild_faiss(self) -> None:
         if self._index is None:

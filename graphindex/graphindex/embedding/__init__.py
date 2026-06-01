@@ -6,15 +6,21 @@ from ..config import Config
 from .base import Embedder
 from .fallback import HashingEmbedder
 
+# Known backends — reject typos instead of silently degrading to fallback.
+VALID_BACKENDS = {"auto", "llamacpp", "hf", "fallback", "none"}
+
 
 def get_embedder(cfg: Config, engine=None) -> Embedder:
     """Pick the embedding backend per config.
 
     ``auto`` uses the llama.cpp Qwen3 embedder when the runtime + GGUF are
     available, otherwise the deterministic hashing fallback so the pipeline
-    always runs.
+    always runs. An unknown backend value raises rather than degrading silently.
     """
     backend = cfg.backend
+    if backend not in VALID_BACKENDS:
+        raise ValueError(f"Unsupported backend: {backend!r} (expected one of "
+                         f"{sorted(VALID_BACKENDS)})")
     if backend == "hf":
         from .hf_inference import HFEmbedder
         return HFEmbedder(cfg)

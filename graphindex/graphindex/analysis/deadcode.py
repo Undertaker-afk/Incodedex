@@ -48,13 +48,17 @@ def flag_dead_code_graph(graph: Graph) -> list[str]:
 
 
 def find_dead_code(db: GraphDB) -> list[dict]:
-    """Query dead-code candidates from a persisted graph."""
+    """Query dead-code candidates from a persisted graph.
+
+    Loads all inbound edge targets once (O(E)) instead of an edges_to() query
+    per node (the previous N+1 pattern).
+    """
+    inbound_dsts = {e.dst for e in db.iter_edges() if e.kind in _INBOUND}
     out = []
     for n in db.iter_nodes():
         if n.kind not in _DEF or _is_entrypointish(n.name):
             continue
-        inbound = [e for e in db.edges_to(n.id) if e.kind in _INBOUND]
-        if not inbound:
+        if n.id not in inbound_dsts:
             out.append({"id": n.id, "name": n.name, "kind": n.kind,
                         "path": n.path, "line": n.start_line})
     return out

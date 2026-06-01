@@ -27,6 +27,35 @@ from ..search import parse_query
 bp = Blueprint("api", __name__, url_prefix="/api")
 
 
+class BadParam(ValueError):
+    """Raised for invalid request params -> mapped to HTTP 400."""
+
+
+def _parse_int(name, raw, default, min_v, max_v):
+    """Parse + clamp an int request param; raise BadParam on bad input."""
+    if raw is None or raw == "":
+        return default
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        raise BadParam(f"{name} must be an integer")
+    return max(min_v, min(max_v, value))
+
+
+def _parse_bool(raw, default=True):
+    """Parse a JSON/string boolean flag, honouring 'false'/'0'/'no'."""
+    if isinstance(raw, bool):
+        return raw
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+@bp.errorhandler(BadParam)
+def _bad_param(e):
+    return jsonify({"error": str(e)}), 400
+
+
 def _state():
     return current_app.config["GRAPHINDEX_STATE"]
 
@@ -52,7 +81,7 @@ def config():
 @bp.get("/graph")
 def graph():
     st = _state()
-    limit = int(request.args.get("limit", 4000))
+    limit = _parse_int("limit", request.args.get("limit"), 4000, 1, 50000)
     kind = request.args.get("kind")
     nodes = st.db.iter_nodes(kind=kind)[:limit]
     node_ids = {n.id for n in nodes}
@@ -102,7 +131,7 @@ def search():
         semantic=request.args.get("semantic") == "true",
         fuzzy=request.args.get("fuzzy") == "true",
         case_sensitive=request.args.get("case") == "true",
-        top_k=int(request.args.get("k", 25)),
+        top_k=_parse_int("k", request.args.get("k"), 25, 1, 200),
     )
     results = st.search_engine.search(q)
     return jsonify({"query": raw, "count": len(results),
@@ -117,7 +146,7 @@ def ask():
     question = (body.get("question") or request.args.get("q") or "").strip()
     if not question:
         return jsonify({"error": "question required"}), 400
-    k = int(body.get("k", 8))
+    k = _parse_int("k", body.get("k"), 8, 1, 200)
     answer = st.ask_engine.ask(question, k=k)
     return jsonify(answer.to_dict())
 
@@ -162,8 +191,8 @@ def stats():
 def index():
     st = _state()
     body = request.get_json(silent=True) or {}
-    do_summarize = bool(body.get("summarize", True))
-    do_embed = bool(body.get("embed", True))
+    do_summarize = _parse_bool(body.get("summarize"), True)
+    do_embed = _parse_bool(body.get("embed"), True)
     backend = body.get("backend")
     started = current_app.config["GRAPHINDEX_RUN_INDEX"](do_summarize, do_embed, backend)
     if not started:

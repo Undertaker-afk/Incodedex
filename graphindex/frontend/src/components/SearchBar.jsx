@@ -25,8 +25,11 @@ export default function SearchBar({ onResults, onSelect }) {
       const opts = {}
       for (const [m] of MODES) if (modes[m]) opts[m] = 'true'
       const r = await api.search(q, opts)
-      setResults(r.results)
-      onResults && onResults(r.results)
+      const rows = r?.results || []   // never setResults(undefined) -> render crash
+      setResults(rows)
+      onResults && onResults(rows)
+    } catch {
+      setResults([])
     } finally { setBusy(false) }
   }
 

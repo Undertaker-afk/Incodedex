@@ -6,6 +6,7 @@ import hashlib
 import os
 import subprocess
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 from .ignore import IgnoreEngine
@@ -38,6 +39,13 @@ LANGUAGE_TABLE: dict[str, tuple[str, str]] = {
 def detect_language(path: str) -> tuple[str, str]:
     ext = os.path.splitext(path)[1].lower()
     return LANGUAGE_TABLE.get(ext, ("", ""))
+
+
+@lru_cache(maxsize=64)
+def _grammar_available(grammar: str) -> bool:
+    """True if a tree-sitter parser for ``grammar`` can be loaded."""
+    from ..parsing.ast_parser import get_parser
+    return get_parser(grammar) is not None
 
 
 @dataclass
@@ -89,6 +97,10 @@ class RepoScanner:
             if stat.st_size > self.max_file_bytes:
                 continue
             language, grammar = detect_language(rel)
+            # If the grammar's tree-sitter wheel isn't installed, the file would
+            # parse as ok=False and add only a bloat file-node — treat as unknown.
+            if grammar and not _grammar_available(grammar):
+                language, grammar = "", ""
             if only_languages and not grammar:
                 continue
             try:

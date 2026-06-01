@@ -58,7 +58,11 @@ def create_app(cfg: Config):
                 state.asking = False
                 state.ask_lock.release()
 
-        threading.Thread(target=_job, daemon=True).start()
+        try:
+            threading.Thread(target=_job, daemon=True).start()
+        except Exception:
+            state.ask_lock.release()
+            raise
         return True
 
     app.config["GRAPHINDEX_RUN_EXTENDED"] = run_extended
@@ -84,7 +88,11 @@ def create_app(cfg: Config):
                 state.indexing = False
                 state.index_lock.release()
 
-        threading.Thread(target=_job, daemon=True).start()
+        try:
+            threading.Thread(target=_job, daemon=True).start()
+        except Exception:
+            state.index_lock.release()
+            raise
         return True
 
     app.config["GRAPHINDEX_RUN_INDEX"] = run_index

@@ -48,10 +48,19 @@ export default function App() {
           <button className={tab === 'deep' ? 'tab on' : 'tab'}
             onClick={() => setTab('deep')}>Deep ask</button>
         </div>
+        {/* All panels stay mounted (toggled via CSS) so a question and its
+            output survive switching to the Inspector to read a reference and
+            back — no need to re-ask. */}
         <div className="right-content">
-          {tab === 'inspect' && <NodeInspector nodeId={selected} onSelect={selectById} />}
-          {tab === 'ask' && <AskPanel onSelect={selectById} />}
-          {tab === 'deep' && <ExtendedAskPanel onSelect={selectById} />}
+          <div style={{ display: tab === 'inspect' ? 'block' : 'none' }}>
+            <NodeInspector nodeId={selected} onSelect={selectById} />
+          </div>
+          <div style={{ display: tab === 'ask' ? 'block' : 'none' }}>
+            <AskPanel onSelect={selectById} />
+          </div>
+          <div style={{ display: tab === 'deep' ? 'block' : 'none' }}>
+            <ExtendedAskPanel onSelect={selectById} />
+          </div>
         </div>
       </div>
     </div>

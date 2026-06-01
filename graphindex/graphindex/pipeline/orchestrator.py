@@ -42,7 +42,10 @@ from .events import EventBus
 
 _EMBEDDABLE = {NodeKind.FILE.value, NodeKind.CLASS.value, NodeKind.INTERFACE.value,
                NodeKind.FUNCTION.value, NodeKind.METHOD.value}
-_SUMMARIZABLE = _EMBEDDABLE
+# File nodes carry no source in `code`, so summarizing them with the LLM wastes
+# inference tokens on empty context — exclude them (they keep heuristic summaries).
+_SUMMARIZABLE = {NodeKind.CLASS.value, NodeKind.INTERFACE.value,
+                 NodeKind.FUNCTION.value, NodeKind.METHOD.value}
 
 
 class Indexer:
@@ -96,7 +99,8 @@ class Indexer:
         self.bus.emit(E.PHASE, phase="parse", message="Parsing & building graph")
         for rec in files:
             try:
-                source = open(rec.abs_path, "rb").read()
+                with open(rec.abs_path, "rb") as fh:   # context-managed: no fd leak
+                    source = fh.read()
                 parsed = extract_symbols(rec.grammar, source)
             except Exception:
                 errors += 1

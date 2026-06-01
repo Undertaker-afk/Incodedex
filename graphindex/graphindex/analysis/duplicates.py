@@ -61,11 +61,10 @@ def flag_duplicates(graph: Graph, vectors: VectorStore, threshold: float = 0.92,
         seen: set[tuple[str, str]] = set()
         ids_set = {n.id for n in nodes}
         for n in nodes:
-            # find this node's stored vector index
-            if n.id not in vectors.ids:
+            # O(1) vector lookup via the public accessor (no internals/scan)
+            vec = vectors.get_vector(n.id)
+            if vec is None:
                 continue
-            idx = vectors.ids.index(n.id)
-            vec = vectors._matrix[idx]
             for other_id, score in vectors.search(vec, top_k=5):
                 if other_id == n.id or other_id not in ids_set:
                     continue

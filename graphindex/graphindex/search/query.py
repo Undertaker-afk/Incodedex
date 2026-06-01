@@ -68,6 +68,9 @@ def parse_query(raw: str, **modes) -> Query:
                 continue
         text_tokens.append(tok)
     q = Query(text=" ".join(text_tokens), filters=filters, **modes)
-    q.scope = filters.get("scope", filters.get("path", q.scope))
+    # `path:` is a substring filter (handled via filters["path"]); only `scope:`
+    # sets the directory-prefix scope, so path: doesn't accidentally behave like
+    # a prefix and exclude valid matches (e.g. path:models).
+    q.scope = filters.get("scope", q.scope)
     q.branch = filters.get("branch", filters.get("commit", q.branch))
     return q

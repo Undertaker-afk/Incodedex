@@ -38,7 +38,6 @@ jobs:
           # We use pip directly, no caching — graphindex has many native
           # wheels (numpy, tree-sitter, rapidfuzz) and the cache key isn't
           # worth the complexity for a once-per-release job.
-          cache: false
 
       - name: Set up Node.js 20
         uses: actions/setup-node@v4

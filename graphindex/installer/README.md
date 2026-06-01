@@ -125,6 +125,19 @@ A minimal GitHub Actions job (Windows runner):
 
 The artifact `graphindex-msi` is what users download.
 
+The full production workflow is at
+`.github/workflows/build-msi.yml`. It runs on:
+
+| Trigger | Behavior |
+|---------|----------|
+| `push` to `main` | Build the MSI, upload as artifact (no release). |
+| `push` of `v*` tag | Build the MSI, upload as artifact **and** attach to a GitHub Release for that tag. |
+| `pull_request` to `main` | Build the MSI to validate the pipeline (artifact download, no release). |
+| Manual `workflow_dispatch` | Build with a custom `--extras` value, default `llama,faiss,mcp`. |
+
+A pre-release flag is auto-set for tags containing `-rc`, `-beta`, or
+`-alpha` so the GitHub Release is marked as pre-release.
+
 ## What ships where in the install
 
 ```

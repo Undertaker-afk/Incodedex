@@ -38,6 +38,20 @@ fallback backend — so the full pipeline, UI and tests run anywhere.
   grounded answer with `[ref N]` citations mapping to file + line + node id
 - Available in the WebUI, CLI (`graphindex ask`) and MCP (`ask_codebase`)
 
+**extended_ask — multi-agent deep investigation**
+- A local orchestrator built to let a coding agent understand a codebase while
+  spending the **fewest possible tokens** (it does the reading; the main agent
+  gets one compact, cited answer).
+- Up to **2 keyword rounds × 4 queries**, then up to **3 parallel search agents**
+  per round for up to **10 rounds**. Each agent reads index data structures
+  (callers/callees/inheritance/refs) and requests specific **source ranges**,
+  then the lead synthesizes a grounded answer.
+- Reports **token-saving stats** (nodes inspected, source ranges read, distilled
+  vs full-file size). WebUI "Deep ask" tab (live), CLI `graphindex extended-ask`,
+  MCP `extended_ask`.
+- Each indexed function stores its **full parameter setup** and a **search
+  string** (the canonical embedding input) alongside its summary.
+
 **Analysis**
 - Dead-code detection, duplicate/near-duplicate detection
 - Language breakdown, internal+external dependency graph

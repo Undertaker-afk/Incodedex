@@ -1,12 +1,28 @@
-import React, { useEffect, useMemo, useRef } from 'react'
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import ForceGraph2D from 'react-force-graph-2d'
 import { nodeFill, hasWarning, WARNING_OUTLINE } from '../colors'
 
 // The Obsidian-style force-directed graph. Nodes are drawn as circles sized by
 // degree, coloured by lifecycle state, with a purple ring for warnings.
+//
+// IMPORTANT: react-force-graph defaults its canvas to the full window size when
+// width/height aren't provided, which would overlay the side panels and eat
+// clicks. We measure the wrapping element and pass explicit dimensions.
 export default function GraphView({ nodes, links, onSelect, selectedId }) {
   const fgRef = useRef()
+  const wrapRef = useRef()
+  const [size, setSize] = useState({ w: 0, h: 0 })
   const data = useMemo(() => ({ nodes, links }), [nodes, links])
+
+  useLayoutEffect(() => {
+    const el = wrapRef.current
+    if (!el) return
+    const measure = () => setSize({ w: el.clientWidth, h: el.clientHeight })
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   useEffect(() => {
     const fg = fgRef.current
@@ -16,8 +32,11 @@ export default function GraphView({ nodes, links, onSelect, selectedId }) {
   }, [])
 
   return (
+    <div ref={wrapRef} style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
     <ForceGraph2D
       ref={fgRef}
+      width={size.w || undefined}
+      height={size.h || undefined}
       graphData={data}
       backgroundColor="#0d1117"
       // settle quickly and STOP so nodes are easy to click/read (no perpetual spin)
@@ -65,5 +84,6 @@ export default function GraphView({ nodes, links, onSelect, selectedId }) {
         ctx.fill()
       }}
     />
+    </div>
   )
 }

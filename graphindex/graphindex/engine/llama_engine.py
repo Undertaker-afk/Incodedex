@@ -139,7 +139,7 @@ def install_llama_log_filter() -> None:
 
 # Install on import so the filter is in place before the first ``Llama(...)``
 # is constructed anywhere in the process.
-install_llama_log_filter()
+# install_llama_log_filter()
 
 
 class LlamaEngine:
@@ -187,7 +187,7 @@ class LlamaEngine:
         path = self.embed_model_path()
         if path is None:
             raise EngineUnavailable("embedding GGUF not available")
-        install_llama_log_filter()
+        # install_llama_log_filter()
         from llama_cpp import Llama, LLAMA_POOLING_TYPE_LAST
         self._embed_model = Llama(
             model_path=str(path), embedding=True, n_ctx=2048, n_batch=512,
@@ -204,7 +204,7 @@ class LlamaEngine:
         path = self.chat_model_path()
         if path is None:
             raise EngineUnavailable("chat GGUF not available")
-        install_llama_log_filter()
+        # install_llama_log_filter()
         from llama_cpp import Llama
         self._chat_model = Llama(
             model_path=str(path), n_ctx=4096, n_threads=self.cfg.n_threads,

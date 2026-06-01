@@ -15,7 +15,7 @@ export default function ExtendedAskPanel({ onSelect }) {
   const [activity, setActivity] = useState([])
   const [flow, setFlow] = useState([])
   const [showFlow, setShowFlow] = useState(false)
-  const [openAgents, setOpenAgents] = useState({})
+  const [openFlowAgents, setOpenFlowAgents] = useState({})
   const [result, setResult] = useState(null)
   const [err, setErr] = useState('')
   const sockRef = useRef(null)
@@ -36,15 +36,15 @@ export default function ExtendedAskPanel({ onSelect }) {
           }])
           break
         case 'ext_agent_start':
-          setActivity((a) => [...a, {
-            kind: 'start', round: evt.round, focus: evt.focus,
-          }])
+          setActivity((a) => upsertAgent(a, {
+            status: 'running', round: evt.round, focus: evt.focus,
+          }))
           setFlow((f) => [...f, {
             kind: 'agent_start', round: evt.round, focus: evt.focus,
           }])
           break
         case 'ext_agent_done':
-          setActivity((a) => [...a, eventToAgent(evt)])
+          setActivity((a) => upsertAgent(a, eventToAgent(evt)))
           setFlow((f) => [...f, eventToFlowAgent(evt)])
           break
         case 'ext_done':
@@ -71,7 +71,7 @@ export default function ExtendedAskPanel({ onSelect }) {
     setResult(null)
     setKeywords([])
     setActivity([])
-    setOpenAgents({})
+    setOpenFlowAgents({})
     setShowFlow(false)
     setFlow([{ kind: 'phase', phase: 'starting', message: 'starting...' }])
     setPhase('starting...')
@@ -99,7 +99,7 @@ export default function ExtendedAskPanel({ onSelect }) {
     return <span key={i}>{p}</span>
   })
 
-  const toggleAgent = (i) => setOpenAgents((open) => ({ ...open, [i]: !open[i] }))
+  const toggleFlowAgent = (id) => setOpenFlowAgents((open) => ({ ...open, [id]: !open[id] }))
 
   const refForNode = (nodeId) => result?.references?.find((x) => x.node_id === nodeId)
 
@@ -144,7 +144,15 @@ export default function ExtendedAskPanel({ onSelect }) {
       return <div key={i} className="flowitem">round {item.round} keywords: {item.keywords.join(', ')}</div>
     }
     if (item.kind === 'agent_start') {
-      return <div key={i} className="flowitem">round {item.round} agent started: {item.focus}</div>
+      const id = flowAgentId(item)
+      const current = activity.find((a) => a.id === id) || item
+      return (
+        <button key={i} type="button" className="flowitem flowagent"
+          onClick={() => toggleFlowAgent(id)}>
+          <span>round {item.round} agent running: {item.focus}</span>
+          {openFlowAgents[id] && renderAgentDetails(current)}
+        </button>
+      )
     }
     if (item.kind === 'agent_done') {
       const refs = item.refs?.length ? `, refs ${item.refs.length}` : ''
@@ -153,7 +161,15 @@ export default function ExtendedAskPanel({ onSelect }) {
         item.wantNodes?.length ? `${item.wantNodes.length} nodes` : '',
         item.wantFiles?.length ? `${item.wantFiles.length} source reads` : '',
       ].filter(Boolean).join(', ')
-      return <div key={i} className="flowitem">round {item.round} agent done: {item.focus}{refs}{asks ? `, requested ${asks}` : ''}</div>
+      const id = flowAgentId(item)
+      const current = activity.find((a) => a.id === id) || item
+      return (
+        <button key={i} type="button" className="flowitem flowagent done"
+          onClick={() => toggleFlowAgent(id)}>
+          <span>round {item.round} agent done: {item.focus}{refs}{asks ? `, requested ${asks}` : ''}</span>
+          {openFlowAgents[id] && renderAgentDetails(current)}
+        </button>
+      )
     }
     return <div key={i} className="flowitem">done: {item.stats?.rounds || 0} rounds, {item.stats?.agents_total || 0} agents</div>
   }
@@ -188,32 +204,6 @@ export default function ExtendedAskPanel({ onSelect }) {
         </div>
       )}
 
-      {keywords.length > 0 && (
-        <div className="kwbox">
-          {keywords.map((k) => (
-            <div key={k.round} className="rewritten">round {k.round} keywords: {k.keywords.join(', ')}</div>
-          ))}
-        </div>
-      )}
-
-      {activity.length > 0 && (
-        <div className="activity">
-          {activity.map((a, i) => (
-            <div key={i} className={`act ${a.kind} ${openAgents[i] ? 'open' : ''}`}
-              role="button" tabIndex={0}
-              onClick={() => toggleAgent(i)}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') toggleAgent(i) }}>
-              <div className="acthead">
-                <span>{a.kind === 'start' ? '~' : 'ok'} round {a.round || '?'} agent</span>
-                <span className="actfocus">{a.focus}</span>
-              </div>
-              {a.findings && <div className="actfind">{a.findings}</div>}
-              {openAgents[i] && renderAgentDetails(a)}
-            </div>
-          ))}
-        </div>
-      )}
-
       {result && (
         <div className="answer">
           <div className="atext">{renderAnswer(result.answer, result.references)}</div>
@@ -240,8 +230,10 @@ export default function ExtendedAskPanel({ onSelect }) {
 }
 
 function eventToAgent(evt) {
+  const id = flowAgentId(evt)
   return {
-    kind: 'done',
+    id,
+    status: 'done',
     round: evt.round,
     focus: evt.focus,
     findings: evt.findings,
@@ -251,6 +243,18 @@ function eventToAgent(evt) {
     wantFiles: evt.want_files || [],
     confident: evt.confident,
   }
+}
+
+function upsertAgent(agents, next) {
+  const id = next.id || flowAgentId(next)
+  const normalized = { id, refs: [], wantNodes: [], wantQueries: [], wantFiles: [], ...next }
+  const index = agents.findIndex((a) => a.id === id)
+  if (index === -1) return [...agents, normalized]
+  return agents.map((a, i) => (i === index ? { ...a, ...normalized } : a))
+}
+
+function flowAgentId(item) {
+  return `${item.round || '?'}:${item.focus || ''}`
 }
 
 function eventToFlowAgent(evt) {

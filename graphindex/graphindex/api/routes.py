@@ -192,6 +192,7 @@ def ask():
     if not question:
         return jsonify({"error": "question required"}), 400
     k = _parse_int("k", body.get("k"), 8, 1, 200)
+    st.ensure_chat()
     answer = st.ask_engine.ask(question, k=k)
     return jsonify(answer.to_dict())
 

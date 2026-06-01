@@ -155,6 +155,8 @@ class AskEngine:
         try:
             answer = self.chat.chat(_ANSWER_SYSTEM, user,
                                     max_tokens=max(256, self.cfg.summary_max_tokens * 3))
+            if not answer or not answer.strip():
+                raise RuntimeError("empty chat answer")
         except Exception:
             # LLM failed -> degraded extractive answer; report it honestly
             answer = self._extractive(question, references)

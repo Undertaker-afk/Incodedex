@@ -57,6 +57,8 @@ def test_extended_ask_empty_chat_keeps_configured_search_shape(indexed):
     assert len({kw for kws in ans.keywords for kw in kws}) > 1
     assert len(ans.focuses) == 3
     assert len(ans.rounds[0].agents) == 3
+    assert any(a.findings for a in ans.rounds[0].agents)
+    assert ans.answer.strip()
 
 
 def test_extended_ask_retrieval_only(indexed):

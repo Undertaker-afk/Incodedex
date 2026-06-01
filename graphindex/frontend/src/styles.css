@@ -147,6 +147,10 @@ button:disabled { opacity: .55; cursor: default; }
   text-transform: uppercase; letter-spacing: .5px; }
 .flowitem { padding: 4px 0 4px 10px; border-left: 2px solid #30363d;
   color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.flowagent { display: block; width: 100%; text-align: left; background: transparent;
+  border-top: 0; border-right: 0; border-bottom: 0; border-radius: 0; }
+.flowagent.done { color: #7ee787; }
+.flowagent:hover { background: #1f6feb12; text-decoration: none; }
 .activity { margin-top: 10px; }
 .act { font-size: 12px; padding: 6px 0; border-bottom: 1px solid var(--border);
   cursor: pointer; }
@@ -157,7 +161,7 @@ button:disabled { opacity: .55; cursor: default; }
 .acthead { display: grid; grid-template-columns: 96px 1fr; gap: 8px; align-items: baseline; }
 .actfocus { color: var(--text); overflow-wrap: anywhere; }
 .actfind { color: var(--text); font-size: 11px; margin-top: 2px; padding-left: 12px; }
-.agentdetail { color: var(--text); margin: 6px 0 2px 104px; padding: 8px;
+.agentdetail { color: var(--text); margin: 6px 0 2px; padding: 8px;
   border: 1px solid var(--border); border-radius: 6px; background: var(--panel2); }
 .agentdetail b { display: block; color: var(--muted); font-size: 10px;
   text-transform: uppercase; letter-spacing: .5px; margin-top: 6px; }

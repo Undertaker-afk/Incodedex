@@ -71,6 +71,7 @@ _STOPWORDS = {
     "about", "after", "before", "because", "between", "could", "does", "doing",
     "done", "enough", "flow", "from", "have", "into", "just", "more", "that",
     "then", "there", "this", "what", "when", "where", "which", "with", "would",
+    "the", "and", "for", "how", "why", "who", "its", "is",
 }
 
 _ALIASES = {
@@ -192,8 +193,8 @@ class ExtendedAsk:
         terms = [w for w in words if w.lower() not in _STOPWORDS]
         expanded = []
         for term in terms:
-            expanded.append(term)
             expanded.extend(_ALIASES.get(term.lower(), []))
+            expanded.append(term)
             snake = re.sub(r"(?<!^)([A-Z])", r"_\1", term).lower()
             if snake != term.lower():
                 expanded.append(snake)
@@ -210,6 +211,17 @@ class ExtendedAsk:
         ]
         pool = pools[min(round_index, len(pools) - 1)]
         return self._dedupe(pool + [question], self.keywords_per_round)
+
+    def _fallback_agent_findings(self, focus: str, briefs: list[dict]) -> str:
+        if not briefs:
+            return "No index matches were retrieved for this focus."
+        parts = []
+        for b in briefs[:5]:
+            loc = f"{b.get('path')}:{b.get('line')}" if b.get("path") else "unknown location"
+            sig = b.get("signature") or b.get("name") or b.get("id")
+            summary = f" - {b.get('summary')}" if b.get("summary") else ""
+            parts.append(f"{b.get('kind')} {sig} at {loc}{summary}")
+        return f"Retrieved evidence for '{focus}': " + "; ".join(parts)
 
     # -- phase 1: keywords ------------------------------------------------
     def _keyword_rounds(self, question: str) -> tuple[list[list[str]], list[dict]]:
@@ -321,6 +333,8 @@ class ExtendedAsk:
             # ensure refs are valid node ids; backfill from retrieved briefs
             valid = {b["id"] for b in briefs}
             res.refs = [r for r in res.refs if r in valid] or [b["id"] for b in briefs[:4]]
+            if not res.findings:
+                res.findings = self._fallback_agent_findings(focus, briefs)
         self._emit("ext_agent_done", focus=focus, round=round_index, findings=res.findings,
                    refs=res.refs, want_nodes=res.want_nodes,
                    want_queries=res.want_queries, want_files=res.want_files,
@@ -450,4 +464,22 @@ class ExtendedAsk:
                 + "\n\nReference list:\n" + ref_list
                 + "\n\nWrite the final answer with [ref N] citations.")
         out = self._chat(_SYNTH_SYSTEM, user, max_tokens=400)
-        return out.strip() or ("\n".join(findings[:12]) + "\n\nReferences:\n" + ref_list)
+        if out.strip():
+            return out.strip()
+        return self._fallback_synthesis(question, findings, ans.references)
+
+    def _fallback_synthesis(self, question: str, findings: list[str], refs: list[dict]) -> str:
+        lines = [f"Investigation summary for: {question}", ""]
+        if findings:
+            lines.append("Agent findings:")
+            lines.extend(findings[:8])
+        else:
+            lines.append("No agent findings were produced.")
+        if refs:
+            lines.append("")
+            lines.append("Key references:")
+            for r in refs[:8]:
+                lines.append(f"- [ref {r['ref']}] {r['kind']} {r['name']} in {r['path']}:{r['start_line']}")
+        lines.append("")
+        lines.append("(LLM synthesis unavailable or empty; showing grounded investigation summary.)")
+        return "\n".join(lines)

@@ -22,12 +22,17 @@ def get_chat(cfg: Config):
             return eng if eng.available() else None
         except Exception:
             return None
-    if backend in ("auto", "llamacpp"):
-        try:
-            from ..engine.llama_engine import LlamaEngine
-            eng = LlamaEngine(cfg)
-            if LlamaEngine.runtime_available() and eng.local_chat_model() is not None:
-                return eng
-        except Exception:
-            return None
+    # The chat model is independent of the embedding backend: if the LFM2.5
+    # GGUF and llama.cpp runtime are present we can answer questions even when
+    # embeddings use the fast fallback (e.g. on a CPU host where embedding a
+    # large repo with the real model would be slow). Disable with backend="none".
+    if backend == "none":
+        return None
+    try:
+        from ..engine.llama_engine import LlamaEngine
+        eng = LlamaEngine(cfg)
+        if LlamaEngine.runtime_available() and eng.local_chat_model() is not None:
+            return eng
+    except Exception:
+        return None
     return None

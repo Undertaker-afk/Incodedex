@@ -42,7 +42,11 @@ class IgnoreEngine:
             patterns.extend(_read_patterns(self.root / fname))
         if extra_patterns:
             patterns.extend(extra_patterns)
-        self.spec = pathspec.PathSpec.from_lines("gitwildmatch", patterns)
+        # "gitignore" factory (newer pathspec); fall back to legacy name.
+        try:
+            self.spec = pathspec.PathSpec.from_lines("gitignore", patterns)
+        except (ValueError, KeyError):
+            self.spec = pathspec.PathSpec.from_lines("gitwildmatch", patterns)
         # A separate spec containing only graphignore for introspection/tests.
         self.graphignore_present = (self.root / ".graphignore").exists()
 

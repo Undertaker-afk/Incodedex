@@ -34,6 +34,15 @@ export default function NodeInspector({ nodeId, onSelect }) {
       </div>
       <div className="ipath">{n.path}:{n.start_line}</div>
 
+      {n.summary && <p className="isum">{n.summary}</p>}
+      {n.tags?.length > 0 && (
+        <div className="itags">{n.tags.map((t) => <span key={t} className="tag">{t}</span>)}</div>
+      )}
+      {n.flags?.length > 0 && (
+        <div className="iflags">{n.flags.map((f) => <span key={f} className="flag">⚠ {f}</span>)}</div>
+      )}
+      <div className="imeta">degree {n.degree} · {n.language} · {n.state}</div>
+
       {/* Monaco Source Viewer */}
       <div style={{ marginTop: '10px', marginBottom: '10px' }}>
         <SourceViewer
@@ -43,14 +52,6 @@ export default function NodeInspector({ nodeId, onSelect }) {
         />
       </div>
 
-      {n.summary && <p className="isum">{n.summary}</p>}
-      {n.tags?.length > 0 && (
-        <div className="itags">{n.tags.map((t) => <span key={t} className="tag">{t}</span>)}</div>
-      )}
-      {n.flags?.length > 0 && (
-        <div className="iflags">{n.flags.map((f) => <span key={f} className="flag">⚠ {f}</span>)}</div>
-      )}
-      <div className="imeta">degree {n.degree} · {n.language} · {n.state}</div>
       <Section title="Callers" items={data.callers} />
       <Section title="Callees" items={data.callees} />
       <Section title="Inherits from" items={data.ancestors} />

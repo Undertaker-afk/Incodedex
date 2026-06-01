@@ -76,6 +76,8 @@ class Node:
     start_line: int = 0
     end_line: int = 0
     signature: str = ""             # e.g. def foo(a, b) / class Bar(Base)
+    params: str = ""                # full parameter setup, e.g. "(a: int, b=2)"
+    search_string: str = ""         # canonical searchable text used for embedding
     type_hint: str = ""             # resolved type (for type disambiguation)
     code: str = ""                  # raw symbol source (not always persisted)
     summary: str = ""               # LFM2.5 summary

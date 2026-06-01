@@ -66,6 +66,7 @@ def build_file(record: FileRecord, parsed: ParsedFile, commit: str = "") -> File
             start_line=sym.start_line,
             end_line=sym.end_line,
             signature=sym.signature,
+            params=sym.params,
             code=sym.code,
             commit=commit,
             extra={"qualified_name": sym.qualified_name},

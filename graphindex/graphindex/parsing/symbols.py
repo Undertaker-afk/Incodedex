@@ -27,6 +27,7 @@ class ParsedSymbol:
     start_line: int
     end_line: int
     signature: str
+    params: str
     node_type: str
     parent: str | None = None         # qualified name of enclosing symbol
     bases: list[str] = field(default_factory=list)   # inheritance targets
@@ -73,6 +74,19 @@ def _signature(node: Any, source: bytes) -> str:
     text = node_text(node, source)
     line = text.splitlines()[0] if text else ""
     return line[:200]
+
+
+def _params(node: Any, source: bytes) -> str:
+    """Full parameter setup for a callable, e.g. ``(a: int, b=2)``."""
+    for field_name in ("parameters", "parameter_list", "type_parameters"):
+        child = node.child_by_field_name(field_name)
+        if child is not None:
+            return node_text(child, source).replace("\n", " ").strip()[:300]
+    # fallback: first parenthesized group on the signature line
+    sig = _signature(node, source)
+    if "(" in sig and ")" in sig:
+        return sig[sig.index("("): sig.rindex(")") + 1][:300]
+    return ""
 
 
 def _collect_identifiers(node: Any, source: bytes, out: list[str]) -> None:
@@ -185,10 +199,13 @@ def extract_symbols(grammar: str, source: bytes) -> ParsedFile:
                     "class", "interface"}:
                 kind = "method"
             qualified = f"{qual_prefix}.{name}" if qual_prefix and name else (name or qual_prefix)
+            is_callable = kind in ("function", "method")
             sym = ParsedSymbol(
                 kind=kind, name=name or "<anon>", qualified_name=qualified,
                 start_line=node.start_point[0] + 1, end_line=node.end_point[0] + 1,
-                signature=_signature(node, source), node_type=ntype,
+                signature=_signature(node, source),
+                params=_params(node, source) if is_callable else "",
+                node_type=ntype,
                 parent=scope.qualified_name if scope else None,
                 code=node_text(node, source),
             )

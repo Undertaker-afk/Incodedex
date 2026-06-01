@@ -33,11 +33,35 @@ def create_app(cfg: Config):
     app.config["GRAPHINDEX_STATE"] = state
     app.config["GRAPHINDEX_SOCKETIO"] = socketio
 
-    # Bridge the pipeline event bus -> SocketIO broadcast.
+    # Bridge the event bus -> SocketIO. Indexing events go on "index_event";
+    # extended_ask events (type starting with "ext_") also go on "ext_event".
     def _forward(evt: IndexEvent) -> None:
-        socketio.emit("index_event", evt.to_dict())
+        d = evt.to_dict()
+        if evt.type.startswith("ext_"):
+            socketio.emit("ext_event", d)
+        else:
+            socketio.emit("index_event", d)
 
     state.bus.subscribe(_forward)
+
+    # Background extended_ask runner (single-flight).
+    def run_extended(question: str, opts: dict) -> bool:
+        if not state.ask_lock.acquire(blocking=False):
+            return False
+
+        def _job():
+            try:
+                state.asking = True
+                eng = state.build_extended(opts, state.bus)
+                state.last_extended = eng.run(question).to_dict()
+            finally:
+                state.asking = False
+                state.ask_lock.release()
+
+        threading.Thread(target=_job, daemon=True).start()
+        return True
+
+    app.config["GRAPHINDEX_RUN_EXTENDED"] = run_extended
 
     # Background index runner (single-flight).
     def run_index(do_summarize=True, do_embed=True, backend=None) -> bool:

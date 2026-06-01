@@ -13,3 +13,5 @@ answer assembled from the retrieved snippets/summaries.
 
 from .asker import AskEngine, Answer, Reference  # noqa: F401
 from .llm import get_chat  # noqa: F401
+from .orchestrator import ExtendedAsk, ExtendedAnswer  # noqa: F401
+from .tools import AgentTools  # noqa: F401

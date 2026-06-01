@@ -112,9 +112,11 @@ class SearchEngine:
                 bump(n.id, 1.0, "regex")
 
     def _fuzzy(self, text, nodes, bump):
+        low = text.lower()
         for n in nodes:
-            score = fuzz.token_set_ratio(text, n.name) / 100.0
-            qr = fuzz.partial_ratio(text.lower(), (n.signature or "").lower()) / 100.0
+            # case-insensitive: typos/partials shouldn't be defeated by casing
+            score = fuzz.token_set_ratio(low, n.name.lower()) / 100.0
+            qr = fuzz.partial_ratio(low, (n.signature or "").lower()) / 100.0
             best = max(score, 0.8 * qr)
             if best >= 0.55:
                 bump(n.id, best, "fuzzy")

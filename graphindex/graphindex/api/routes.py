@@ -122,6 +122,31 @@ def ask():
     return jsonify(answer.to_dict())
 
 
+@bp.post("/extended_ask")
+def extended_ask():
+    """Run the multi-agent investigation in the background; stream via WS.
+
+    Body: {question, keyword_rounds<=4, keywords_per_round<=8,
+           agents_per_round<=3, max_rounds<=10}. Progress streams on the
+    "ext_event" socket channel; the final result is the "ext_done" event and
+    is also retrievable from GET /api/extended_ask/last.
+    """
+    body = request.get_json(silent=True) or {}
+    question = (body.get("question") or "").strip()
+    if not question:
+        return jsonify({"error": "question required"}), 400
+    started = current_app.config["GRAPHINDEX_RUN_EXTENDED"](question, body)
+    if not started:
+        return jsonify({"status": "already_running"}), 409
+    return jsonify({"status": "started"})
+
+
+@bp.get("/extended_ask/last")
+def extended_ask_last():
+    st = _state()
+    return jsonify({"asking": st.asking, "result": st.last_extended})
+
+
 @bp.get("/stats")
 def stats():
     st = _state()

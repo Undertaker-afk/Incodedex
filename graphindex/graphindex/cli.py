@@ -187,6 +187,58 @@ def ask(question, repo, top, backend, as_json):
     db.close()
 
 
+@main.command(name="extended-ask")
+@click.argument("question")
+@click.argument("repo", default=".")
+@click.option("--rounds", default=10, help="Max agent rounds (<=10).")
+@click.option("--agents", default=3, help="Agents per round (<=3).")
+@click.option("--keyword-rounds", default=2, help="Keyword rounds (<=4).")
+@click.option("--backend", type=click.Choice(["auto", "llamacpp", "hf", "fallback", "none"]),
+              default=None)
+@click.option("--json", "as_json", is_flag=True)
+def extended_ask(question, repo, rounds, agents, keyword_rounds, backend, as_json):
+    """Multi-agent deep investigation: keyword rounds -> parallel search agents
+    that read the index + source -> grounded answer. Built to let a coding agent
+    understand a codebase while spending minimal tokens."""
+    from .storage.db import GraphDB
+    from .storage.vectors import VectorStore
+    from .embedding import get_embedder
+    from .qa import ExtendedAsk, get_chat
+    cfg = _cfg(repo, backend=backend)
+    db = GraphDB(cfg.db_path)
+    dim = db.get_meta("embed_dim", cfg.embed_dim) or cfg.embed_dim
+    vs = VectorStore(cfg.vectors_path, dim)
+
+    def on(evt):
+        p = evt.payload
+        if evt.type == "ext_phase":
+            console.print(f"[cyan]▸ {p.get('message','')}[/cyan]")
+        elif evt.type == "ext_keywords":
+            console.print(f"  [dim]keywords r{p.get('round')}: {', '.join(p.get('keywords',[]))}[/dim]")
+        elif evt.type == "ext_agent_done":
+            console.print(f"  [green]agent[/green] {p.get('focus','')[:60]} → "
+                          f"{p.get('findings','')[:80]}")
+
+    from .pipeline import EventBus
+    bus = EventBus(); bus.subscribe(on)
+    eng = ExtendedAsk(cfg, db, vs, get_embedder(cfg), chat=get_chat(cfg), bus=bus,
+                      keyword_rounds=keyword_rounds, agents_per_round=agents,
+                      max_rounds=rounds)
+    ans = eng.run(question)
+    if as_json:
+        click.echo(json.dumps(ans.to_dict(), indent=2))
+    else:
+        console.print(f"\n[bold]{ans.answer}[/bold]\n")
+        t = Table(title=f"References (backend: {ans.backend})")
+        for col in ("ref", "kind", "name", "path:line"):
+            t.add_column(col)
+        for r in ans.references:
+            t.add_row(str(r["ref"]), r["kind"], r["name"], f"{r['path']}:{r['start_line']}")
+        console.print(t)
+        console.print(f"[dim]stats: {ans.stats}[/dim]")
+    db.close()
+
+
 @main.command()
 @click.argument("repo", default=".")
 @click.option("--json", "as_json", is_flag=True)

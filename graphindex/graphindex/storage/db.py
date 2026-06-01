@@ -86,23 +86,26 @@ class GraphDB:
     def upsert_node(self, node: Node) -> None:
         self.conn.execute(
             "INSERT INTO nodes(id,kind,name,path,language,start_line,end_line,signature,"
-            "type_hint,summary,tags,state,degree,flags,commit_id,extra) "
-            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
+            "params,search_string,type_hint,summary,tags,state,degree,flags,commit_id,extra) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
             "kind=excluded.kind,name=excluded.name,path=excluded.path,language=excluded.language,"
             "start_line=excluded.start_line,end_line=excluded.end_line,signature=excluded.signature,"
+            "params=excluded.params,search_string=excluded.search_string,"
             "type_hint=excluded.type_hint,summary=excluded.summary,tags=excluded.tags,"
             "state=excluded.state,degree=excluded.degree,flags=excluded.flags,"
             "commit_id=excluded.commit_id,extra=excluded.extra",
             (node.id, node.kind, node.name, node.path, node.language, node.start_line,
-             node.end_line, node.signature, node.type_hint, node.summary, _dumps(node.tags),
+             node.end_line, node.signature, node.params, node.search_string,
+             node.type_hint, node.summary, _dumps(node.tags),
              node.state, node.degree, _dumps(node.flags), node.commit, _dumps(node.extra)),
         )
         # keep FTS in sync
         self.conn.execute("DELETE FROM nodes_fts WHERE id=?", (node.id,))
         self.conn.execute(
-            "INSERT INTO nodes_fts(id,name,signature,summary,tags,code) VALUES(?,?,?,?,?,?)",
-            (node.id, node.name, node.signature, node.summary, " ".join(node.tags),
-             node.code[:4000]),
+            "INSERT INTO nodes_fts(id,name,signature,params,summary,tags,search_string,code) "
+            "VALUES(?,?,?,?,?,?,?,?)",
+            (node.id, node.name, node.signature, node.params, node.summary,
+             " ".join(node.tags), node.search_string, node.code[:4000]),
         )
 
     def upsert_nodes(self, nodes: Iterable[Node]) -> None:
@@ -194,6 +197,7 @@ class GraphDB:
             id=row["id"], kind=row["kind"], name=row["name"] or "", path=row["path"] or "",
             language=row["language"] or "", start_line=row["start_line"] or 0,
             end_line=row["end_line"] or 0, signature=row["signature"] or "",
+            params=row["params"] or "", search_string=row["search_string"] or "",
             type_hint=row["type_hint"] or "", summary=row["summary"] or "",
             tags=_loads(row["tags"], []), state=row["state"] or "discovered",
             degree=row["degree"] or 0, flags=_loads(row["flags"], []),

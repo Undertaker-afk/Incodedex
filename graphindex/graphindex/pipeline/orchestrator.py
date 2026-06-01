@@ -107,6 +107,9 @@ class Indexer:
                 graph.add_node(n)
                 self._emit_node_add(n)
             for n in fb.nodes:
+                # canonical searchable text (also the embedding input) — stored
+                if n.kind in _EMBEDDABLE:
+                    n.search_string = embedding_text(n)
                 n.state = NodeState.PARSED.value
                 self._emit_node_update(n)
             for e in fb.edges:
@@ -203,7 +206,7 @@ class Indexer:
         batch = max(1, self.cfg.embed_batch)
         for i in range(0, len(nodes), batch):
             chunk = nodes[i:i + batch]
-            texts = [embedding_text(n) for n in chunk]
+            texts = [n.search_string or embedding_text(n) for n in chunk]
             try:
                 mat = self.embedder.embed(texts)
             except Exception:

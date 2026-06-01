@@ -15,7 +15,7 @@ from ..analysis.languages import language_breakdown
 from ..config import Config
 from ..embedding import get_embedder
 from ..graph.resolver import call_hierarchy, find_references, inheritance
-from ..qa import AskEngine, get_chat
+from ..qa import AskEngine, ExtendedAsk, get_chat
 from ..search import SearchEngine, parse_query
 from ..storage.db import GraphDB
 from ..storage.vectors import VectorStore
@@ -34,7 +34,8 @@ def build_server(cfg: Config):
     vectors = VectorStore(cfg.vectors_path, dim)
     embedder = get_embedder(cfg)
     engine = SearchEngine(db, vectors, embedder)
-    ask_engine = AskEngine(cfg, db, vectors, embedder, chat=get_chat(cfg))
+    chat = get_chat(cfg)
+    ask_engine = AskEngine(cfg, db, vectors, embedder, chat=chat)
 
     mcp = FastMCP("graphindex")
 
@@ -50,6 +51,19 @@ def build_server(cfg: Config):
         """Ask a natural-language question; returns a grounded answer with
         file/index references (RAG: rewrite -> retrieve -> read -> answer)."""
         return ask_engine.ask(question, k=k).to_dict()
+
+    @mcp.tool()
+    def extended_ask(question: str, max_rounds: int = 10, agents_per_round: int = 3,
+                     keyword_rounds: int = 2) -> dict:
+        """Deep multi-agent investigation of the codebase. Runs keyword rounds,
+        then up to `agents_per_round` parallel agents over up to `max_rounds`
+        rounds; agents read index structures and source slices. Returns ONE
+        compact grounded answer with references + token-saving stats — the
+        token-efficient way for a coding agent to understand the codebase."""
+        eng = ExtendedAsk(cfg, db, vectors, embedder, chat=chat,
+                          keyword_rounds=keyword_rounds, agents_per_round=agents_per_round,
+                          max_rounds=max_rounds)
+        return eng.run(question).to_dict()
 
     @mcp.tool()
     def get_node(node_id: str) -> dict:

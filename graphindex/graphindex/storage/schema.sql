@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS nodes (
     start_line INTEGER,
     end_line   INTEGER,
     signature  TEXT,
+    params     TEXT,          -- full parameter setup, e.g. "(a: int, b=2)"
+    search_string TEXT,       -- canonical searchable text (embedding input)
     type_hint  TEXT,
     summary    TEXT,
     tags       TEXT,          -- json array
@@ -58,7 +60,7 @@ CREATE INDEX IF NOT EXISTS idx_edges_kind ON edges(kind);
 
 -- Full-text index over symbol names + summaries for fast text/regex prefilter.
 CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5(
-    id UNINDEXED, name, signature, summary, tags, code,
+    id UNINDEXED, name, signature, params, summary, tags, search_string, code,
     tokenize = 'unicode61'
 );
 

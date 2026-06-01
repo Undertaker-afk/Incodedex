@@ -61,8 +61,10 @@ DEFAULT_EMBED_MODEL = ModelSpec(
 )
 
 DEFAULT_CHAT_MODEL = ModelSpec(
-    repo_id=_env("CHAT_REPO", "LiquidAI/LFM2-1.2B-GGUF") or "LiquidAI/LFM2-1.2B-GGUF",
-    filename=_env("CHAT_FILE", "LFM2-1.2B-Q4_K_M.gguf") or "LFM2-1.2B-Q4_K_M.gguf",
+    repo_id=_env("CHAT_REPO", "LiquidAI/LFM2.5-1.2B-Instruct-GGUF")
+    or "LiquidAI/LFM2.5-1.2B-Instruct-GGUF",
+    filename=_env("CHAT_FILE", "LFM2.5-1.2B-Instruct-Q4_K_M.gguf")
+    or "LFM2.5-1.2B-Instruct-Q4_K_M.gguf",
     kind="chat",
 )
 
@@ -95,7 +97,12 @@ class Config:
     duplicate_similarity: float = 0.92
     summary_max_tokens: int = field(default_factory=lambda: _env_int("SUMMARY_TOKENS", 96))
     embed_batch: int = field(default_factory=lambda: _env_int("EMBED_BATCH", 16))
-    n_threads: int = field(default_factory=lambda: _env_int("THREADS", os.cpu_count() or 4))
+    # llama.cpp threading. Capping is important: on high-core-count / cgroup
+    # limited hosts, an unbounded batch threadpool spin-waits and stalls.
+    n_threads: int = field(
+        default_factory=lambda: _env_int("THREADS", min(os.cpu_count() or 4, 8)))
+    n_threads_batch: int = field(
+        default_factory=lambda: _env_int("THREADS_BATCH", min(os.cpu_count() or 4, 8)))
 
     # Server.
     host: str = field(default_factory=lambda: _env("HOST", "0.0.0.0") or "0.0.0.0")

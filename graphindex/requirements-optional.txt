@@ -1,0 +1,13 @@
+# Optional dependencies — enable real local models and acceleration.
+# Install:  pip install -r requirements-optional.txt
+
+# Embedded llama.cpp runtime (Qwen3-Embedding-0.6B + LFM2.5-1.2B-Instruct).
+# Prefer the project's prebuilt CPU wheels (no compiler needed):
+#   pip install --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu llama-cpp-python
+llama-cpp-python>=0.3
+
+# Fast vector index (falls back to a pure-NumPy index if absent).
+faiss-cpu>=1.8
+
+# Expose graphindex search/graph over the Model Context Protocol.
+mcp>=1.0

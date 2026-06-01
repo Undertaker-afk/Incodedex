@@ -11,6 +11,7 @@ import threading
 from ..config import Config
 from ..embedding import get_embedder
 from ..pipeline.events import EventBus
+from ..qa import AskEngine, get_chat
 from ..search import SearchEngine
 from ..storage.db import GraphDB
 from ..storage.vectors import VectorStore
@@ -33,6 +34,9 @@ class AppState:
         # Embedder for query-time semantic search (lazy/real or fallback).
         self.embedder = get_embedder(self.cfg)
         self.search_engine = SearchEngine(self.db, self.vectors, self.embedder)
+        # Chat model is loaded lazily on first ask; building the engine is cheap.
+        self.ask_engine = AskEngine(self.cfg, self.db, self.vectors,
+                                    self.embedder, chat=get_chat(self.cfg))
 
     def reload(self) -> None:
         """Re-open read components (call after an index run completes)."""

@@ -109,6 +109,19 @@ def search():
                     "results": [r.to_dict() for r in results]})
 
 
+@bp.post("/ask")
+def ask():
+    """Grounded RAG: rewrite question -> retrieve -> read source -> answer."""
+    st = _state()
+    body = request.get_json(silent=True) or {}
+    question = (body.get("question") or request.args.get("q") or "").strip()
+    if not question:
+        return jsonify({"error": "question required"}), 400
+    k = int(body.get("k", 8))
+    answer = st.ask_engine.ask(question, k=k)
+    return jsonify(answer.to_dict())
+
+
 @bp.get("/stats")
 def stats():
     st = _state()

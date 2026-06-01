@@ -3,6 +3,7 @@ import GraphView from './components/GraphView'
 import Sidebar from './components/Sidebar'
 import SearchBar from './components/SearchBar'
 import NodeInspector from './components/NodeInspector'
+import AskPanel from './components/AskPanel'
 import { useGraphStream } from './hooks/useGraphStream'
 import { api } from './api/client'
 
@@ -10,12 +11,13 @@ export default function App() {
   const { nodes, links, phase, stats, indexing, logLine } = useGraphStream()
   const [config, setConfig] = useState(null)
   const [selected, setSelected] = useState(null)
+  const [tab, setTab] = useState('inspect')
 
   useEffect(() => { api.config().then(setConfig).catch(() => {}) }, [])
 
   const onIndex = () => api.index({ summarize: true, embed: true }).catch(() => {})
   const onPrune = () => api.prune().catch(() => {})
-  const selectById = (n) => setSelected(n.id || n)
+  const selectById = (n) => { setSelected(n.id || n); setTab('inspect') }
 
   return (
     <div className="app">
@@ -37,7 +39,15 @@ export default function App() {
       </div>
 
       <div className="right">
-        <NodeInspector nodeId={selected} onSelect={selectById} />
+        <div className="tabs">
+          <button className={tab === 'inspect' ? 'tab on' : 'tab'}
+            onClick={() => setTab('inspect')}>Inspector</button>
+          <button className={tab === 'ask' ? 'tab on' : 'tab'}
+            onClick={() => setTab('ask')}>Ask codebase</button>
+        </div>
+        {tab === 'inspect'
+          ? <NodeInspector nodeId={selected} onSelect={selectById} />
+          : <AskPanel onSelect={selectById} />}
       </div>
     </div>
   )

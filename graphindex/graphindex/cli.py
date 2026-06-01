@@ -151,6 +151,43 @@ def watch(repo, no_summarize):
 
 
 @main.command()
+@click.argument("question")
+@click.argument("repo", default=".")
+@click.option("-k", "--top", default=8, help="Snippets to retrieve.")
+@click.option("--backend", type=click.Choice(["auto", "llamacpp", "hf", "fallback"]),
+              default=None)
+@click.option("--json", "as_json", is_flag=True)
+def ask(question, repo, top, backend, as_json):
+    """Ask a grounded question about the codebase (RAG with citations)."""
+    from .storage.db import GraphDB
+    from .storage.vectors import VectorStore
+    from .embedding import get_embedder
+    from .qa import AskEngine, get_chat
+    cfg = _cfg(repo, backend=backend)
+    db = GraphDB(cfg.db_path)
+    dim = db.get_meta("embed_dim", cfg.embed_dim) or cfg.embed_dim
+    vs = VectorStore(cfg.vectors_path, dim)
+    eng = AskEngine(cfg, db, vs, get_embedder(cfg), chat=get_chat(cfg))
+    with console.status("thinking…"):
+        ans = eng.ask(question, k=top)
+    if as_json:
+        click.echo(json.dumps(ans.to_dict(), indent=2))
+    else:
+        console.print(f"[bold cyan]Q:[/bold cyan] {question}")
+        if ans.rewritten and ans.rewritten != [question]:
+            console.print(f"[dim]search queries: {', '.join(ans.rewritten)}[/dim]")
+        console.print(f"\n[bold]{ans.answer}[/bold]\n")
+        t = Table(title=f"References  (backend: {ans.backend})")
+        for col in ("ref", "kind", "name", "path:line", "score"):
+            t.add_column(col)
+        for r in ans.references:
+            t.add_row(str(r.ref), r.kind, r.name,
+                      f"{r.path}:{r.start_line}", f"{r.score:.3f}")
+        console.print(t)
+    db.close()
+
+
+@main.command()
 @click.argument("repo", default=".")
 @click.option("--json", "as_json", is_flag=True)
 def stats(repo, as_json):

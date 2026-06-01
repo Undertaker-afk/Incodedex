@@ -93,3 +93,27 @@ button:disabled { opacity: .55; cursor: default; }
 .k-class, .k-interface { background: #f8514922; color: #ff7b72; }
 .k-file { background: #3fb95022; color: #7ee787; }
 .k-external { background: #f0883e22; color: #f0883e; }
+
+/* tabs */
+.tabs { display: flex; border-bottom: 1px solid var(--border); }
+.tab { flex: 1; border: none; border-radius: 0; background: var(--panel2);
+  color: var(--muted); padding: 9px; border-bottom: 2px solid transparent; }
+.tab.on { color: #fff; border-bottom-color: var(--accent); background: var(--panel); }
+
+/* ask panel */
+.ask { padding: 14px; }
+.ask form { display: flex; flex-direction: column; gap: 6px; }
+.ask textarea { background: var(--panel); border: 1px solid var(--border); color: var(--text);
+  border-radius: 6px; padding: 8px; resize: vertical; font: inherit; }
+.ask button { align-self: flex-end; }
+.askerr { color: #f85149; margin-top: 8px; font-size: 12px; }
+.answer { margin-top: 12px; }
+.rewritten { color: var(--muted); font-size: 11px; margin-bottom: 8px; font-style: italic; }
+.atext { line-height: 1.55; white-space: pre-wrap; }
+.abackend { color: var(--muted); font-size: 11px; margin: 8px 0; }
+.refchip { color: #79c0ff; cursor: pointer; font-weight: 600; }
+.refchip:hover { text-decoration: underline; }
+.aref { padding: 6px 0; border-bottom: 1px solid var(--border); cursor: pointer; }
+.aref:hover .arname { color: #fff; }
+.refnum { color: var(--accent); font-weight: 700; margin-right: 6px; }
+.arname { font-weight: 600; margin-left: 6px; }

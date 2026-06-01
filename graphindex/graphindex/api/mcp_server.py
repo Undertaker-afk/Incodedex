@@ -15,6 +15,7 @@ from ..analysis.languages import language_breakdown
 from ..config import Config
 from ..embedding import get_embedder
 from ..graph.resolver import call_hierarchy, find_references, inheritance
+from ..qa import AskEngine, get_chat
 from ..search import SearchEngine, parse_query
 from ..storage.db import GraphDB
 from ..storage.vectors import VectorStore
@@ -33,6 +34,7 @@ def build_server(cfg: Config):
     vectors = VectorStore(cfg.vectors_path, dim)
     embedder = get_embedder(cfg)
     engine = SearchEngine(db, vectors, embedder)
+    ask_engine = AskEngine(cfg, db, vectors, embedder, chat=get_chat(cfg))
 
     mcp = FastMCP("graphindex")
 
@@ -42,6 +44,12 @@ def build_server(cfg: Config):
         """Search the indexed codebase (regex/semantic/fuzzy/filtered)."""
         q = parse_query(query, regex=regex, semantic=semantic, fuzzy=fuzzy, top_k=k)
         return [r.to_dict() for r in engine.search(q)]
+
+    @mcp.tool()
+    def ask_codebase(question: str, k: int = 8) -> dict:
+        """Ask a natural-language question; returns a grounded answer with
+        file/index references (RAG: rewrite -> retrieve -> read -> answer)."""
+        return ask_engine.ask(question, k=k).to_dict()
 
     @mcp.tool()
     def get_node(node_id: str) -> dict:

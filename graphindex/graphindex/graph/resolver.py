@@ -58,8 +58,10 @@ def resolve_references(graph: Graph, refs: list[RawRef]) -> ResolveStats:
 
     # module spec -> file node id (for internal import resolution)
     module_index: dict[str, str] = {}
+    file_by_path: dict[str, str] = {}
     for node in graph.nodes.values():
         if node.kind == NodeKind.FILE.value:
+            file_by_path[node.path] = node.id
             for cand in _module_path_candidates(node.path):
                 module_index.setdefault(cand, node.id)
 
@@ -108,7 +110,11 @@ def resolve_references(graph: Graph, refs: list[RawRef]) -> ResolveStats:
                 stats.unresolved_node_ids.add(dst)
 
         elif ref.kind == "import":
-            internal = _match_module(ref.name, module_index)
+            internal = None
+            if ref.name.startswith("."):  # python relative import
+                internal = _resolve_relative(ref.name, src.path, file_by_path)
+            if internal is None:
+                internal = _match_module(ref.name, module_index)
             if internal:
                 graph.add_edge(Edge(src=ref.src_id, dst=internal,
                                     kind=EdgeKind.IMPORTS.value))
@@ -128,6 +134,26 @@ def _prefer_same_file(targets: list[str], graph: Graph, path: str) -> list[str]:
         return targets
     same = [t for t in targets if graph.nodes[t].path == path]
     return same or targets
+
+
+def _resolve_relative(module: str, src_path: str, file_by_path: dict[str, str]
+                      ) -> str | None:
+    """Resolve a Python relative import (``.`` / ``..pkg.mod``) to a file node."""
+    dots = len(module) - len(module.lstrip("."))
+    name = module[dots:]
+    src_dir = src_path.split("/")[:-1]
+    up = dots - 1  # one dot = current package
+    base = src_dir[: len(src_dir) - up] if up <= len(src_dir) else None
+    if base is None:
+        return None
+    suffix = name.split(".") if name else []
+    target = base + suffix
+    stem = "/".join(target)
+    for cand in (f"{stem}.py", f"{stem}/__init__.py",
+                 "/".join(base) + "/__init__.py"):
+        if cand in file_by_path:
+            return file_by_path[cand]
+    return None
 
 
 def _match_module(module: str, module_index: dict[str, str]) -> str | None:

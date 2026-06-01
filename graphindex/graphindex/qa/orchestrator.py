@@ -67,6 +67,23 @@ _SYNTH_SYSTEM = (
     "unknown from the context, say so explicitly. Be concise and concrete."
 )
 
+_STOPWORDS = {
+    "about", "after", "before", "because", "between", "could", "does", "doing",
+    "done", "enough", "flow", "from", "have", "into", "just", "more", "that",
+    "then", "there", "this", "what", "when", "where", "which", "with", "would",
+}
+
+_ALIASES = {
+    "deepask": ["deep ask", "extended_ask", "extended ask"],
+    "deep": ["extended_ask", "investigation"],
+    "ask": ["ask", "extended_ask"],
+    "indexer": ["index", "pipeline", "orchestrator"],
+    "agent": ["agent", "agents", "orchestrator"],
+    "agents": ["agent", "agents", "orchestrator"],
+    "keyword": ["keyword", "keywords", "search queries"],
+    "keywords": ["keyword", "keywords", "search queries"],
+}
+
 
 def _extract_json(text: str) -> dict:
     """Best-effort parse of a JSON object from an LLM reply."""
@@ -158,23 +175,63 @@ class ExtendedAsk:
                 out.append(ln)
         return out[:limit]
 
+    def _dedupe(self, values: list[str], limit: int) -> list[str]:
+        out, seen = [], set()
+        for value in values:
+            clean = re.sub(r"\s+", " ", str(value or "").strip())
+            key = clean.lower()
+            if clean and key not in seen:
+                out.append(clean)
+                seen.add(key)
+            if len(out) >= limit:
+                break
+        return out
+
+    def _fallback_keywords(self, question: str, hits: list[str], round_index: int) -> list[str]:
+        words = re.findall(r"[A-Za-z_][A-Za-z0-9_]{2,}", question)
+        terms = [w for w in words if w.lower() not in _STOPWORDS]
+        expanded = []
+        for term in terms:
+            expanded.append(term)
+            expanded.extend(_ALIASES.get(term.lower(), []))
+            snake = re.sub(r"(?<!^)([A-Z])", r"_\1", term).lower()
+            if snake != term.lower():
+                expanded.append(snake)
+        phrases = []
+        for a, b in zip(terms, terms[1:]):
+            phrases.append(f"{a} {b}")
+            phrases.append(f"{a}_{b}")
+        hit_terms = [h for h in hits if h and len(h) <= 80]
+        pools = [
+            expanded,
+            phrases + expanded,
+            hit_terms + expanded,
+            hit_terms + phrases + [question],
+        ]
+        pool = pools[min(round_index, len(pools) - 1)]
+        return self._dedupe(pool + [question], self.keywords_per_round)
+
     # -- phase 1: keywords ------------------------------------------------
     def _keyword_rounds(self, question: str) -> tuple[list[list[str]], list[dict]]:
         rounds: list[list[str]] = []
         pool: dict[str, dict] = {}
         prior = ""
         for r in range(self.keyword_rounds):
+            hits = []
             if self.chat is not None:
                 sys = _KEYWORD_SYSTEM.format(n=self.keywords_per_round)
                 user = f"Question: {question}\n{prior}"
                 kws = self._lines(self._chat(sys, user, 90), self.keywords_per_round)
             else:
                 kws = []
-            if not kws:
-                kws = [question]
+            if len(kws) < self.keywords_per_round:
+                hit_names = [d.get("name", "") for d in pool.values()]
+                kws = self._dedupe(
+                    kws + self._fallback_keywords(question, hit_names, r),
+                    self.keywords_per_round,
+                )
             rounds.append(kws)
             self._emit("ext_keywords", round=r + 1, keywords=kws)
-            hits = []
             for kw in kws:
                 for d in self.tools.search(kw, k=4):
                     pool.setdefault(d["id"], d)
@@ -184,14 +241,26 @@ class ExtendedAsk:
         return rounds, list(pool.values())
 
     # -- phase 2: focuses -------------------------------------------------
+    def _fallback_focuses(self, question: str) -> list[str]:
+        pool = list(getattr(self, "pool", []))
+        names = self._dedupe([d.get("name", "") for d in pool[:8]], 4)
+        symbol_hint = ", ".join(names) if names else question
+        candidates = [
+            f"Find entry points, handlers, and UI/API calls for: {question}",
+            f"Trace orchestration flow, rounds, stop conditions, and handoffs for: {question}",
+            f"Inspect index search, graph expansion, and source-reading tools around: {symbol_hint}",
+            f"Validate final synthesis, references, and progress events for: {question}",
+        ]
+        return candidates[: self.agents_per_round]
+
     def _focuses(self, question: str) -> list[str]:
+        fallback = self._fallback_focuses(question)
         if self.chat is not None:
             sys = _FOCUS_SYSTEM.format(n=self.agents_per_round)
             foc = self._lines(self._chat(sys, f"Question: {question}", 90),
                               self.agents_per_round)
-            if foc:
-                return foc
-        return [question]
+            return self._dedupe(foc + fallback, self.agents_per_round)
+        return fallback
 
     # -- context assembly -------------------------------------------------
     def _context_for(self, focus: str, seeds: dict) -> tuple[str, list[dict]]:
@@ -229,9 +298,9 @@ class ExtendedAsk:
         return ctx, list(briefs.values())
 
     # -- one agent --------------------------------------------------------
-    def _run_agent(self, focus: str, seeds: dict) -> AgentResult:
+    def _run_agent(self, focus: str, seeds: dict, round_index: int) -> AgentResult:
         ctx, briefs = self._context_for(focus, seeds)
-        self._emit("ext_agent_start", focus=focus)
+        self._emit("ext_agent_start", focus=focus, round=round_index)
         if self.chat is None:
             names = ", ".join(f"{b['kind']} {b['name']} ({b['path']})" for b in briefs[:5])
             res = AgentResult(focus=focus,
@@ -252,8 +321,10 @@ class ExtendedAsk:
             # ensure refs are valid node ids; backfill from retrieved briefs
             valid = {b["id"] for b in briefs}
             res.refs = [r for r in res.refs if r in valid] or [b["id"] for b in briefs[:4]]
-        self._emit("ext_agent_done", focus=focus, findings=res.findings,
-                   refs=res.refs, confident=res.confident)
+        self._emit("ext_agent_done", focus=focus, round=round_index, findings=res.findings,
+                   refs=res.refs, want_nodes=res.want_nodes,
+                   want_queries=res.want_queries, want_files=res.want_files,
+                   confident=res.confident)
         return res
 
     # -- main -------------------------------------------------------------
@@ -278,7 +349,7 @@ class ExtendedAsk:
             round_res = RoundResult(index=r + 1)
             with ThreadPoolExecutor(max_workers=self.agents_per_round) as ex:
                 futures = [ex.submit(self._run_agent, focuses[i],
-                                     seeds_by_focus.get(i, {}))
+                                     seeds_by_focus.get(i, {}), r + 1)
                            for i in range(len(focuses))]
                 agents = [f.result() for f in futures]
             round_res.agents = agents

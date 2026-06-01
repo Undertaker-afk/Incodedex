@@ -138,10 +138,32 @@ button:disabled { opacity: .55; cursor: default; }
 .caps input { width: 44px; background: var(--panel); border: 1px solid var(--border);
   color: var(--text); border-radius: 5px; padding: 3px 5px; }
 .kwbox { margin-top: 8px; }
+.flow-toggle { display: block; width: 100%; text-align: left; background: transparent;
+  border: none; color: #f2c744; padding: 4px 0; margin: 4px 0; font-size: 12px; }
+.flow-toggle:hover, .flow-toggle.on { color: #ffd866; text-decoration: underline; }
+.flowbox { margin: 8px 0 10px; padding: 8px; border: 1px solid var(--border);
+  border-radius: 6px; background: var(--panel); }
+.flowbox h4 { margin: 0 0 6px; color: var(--muted); font-size: 11px;
+  text-transform: uppercase; letter-spacing: .5px; }
+.flowitem { padding: 4px 0 4px 10px; border-left: 2px solid #30363d;
+  color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
 .activity { margin-top: 10px; }
-.act { font-size: 12px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+.act { font-size: 12px; padding: 6px 0; border-bottom: 1px solid var(--border);
+  cursor: pointer; }
+.act:hover .actfocus { color: #fff; }
+.act.open { background: #1f6feb12; margin: 0 -6px; padding: 6px; border-radius: 6px; }
 .act.start { color: var(--muted); }
 .act.done { color: #7ee787; }
+.acthead { display: grid; grid-template-columns: 96px 1fr; gap: 8px; align-items: baseline; }
+.actfocus { color: var(--text); overflow-wrap: anywhere; }
 .actfind { color: var(--text); font-size: 11px; margin-top: 2px; padding-left: 12px; }
+.agentdetail { color: var(--text); margin: 6px 0 2px 104px; padding: 8px;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--panel2); }
+.agentdetail b { display: block; color: var(--muted); font-size: 10px;
+  text-transform: uppercase; letter-spacing: .5px; margin-top: 6px; }
+.agentdetail b:first-child { margin-top: 0; }
+.agentdetail p { margin: 2px 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.agentrefs { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
+.agentrefs button { align-self: auto; padding: 2px 6px; font-size: 11px; }
 .savings { background: #1f6feb1a; border: 1px solid #1f6feb55; border-radius: 6px;
   padding: 6px 8px; font-size: 11px; color: #79c0ff; margin: 8px 0; line-height: 1.5; }

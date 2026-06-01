@@ -23,6 +23,13 @@ class StubChat:
         return "Dog inherits Animal and speak() calls noise() [ref 1]."
 
 
+class EmptyChat:
+    name = "empty"
+
+    def chat(self, system, user, max_tokens=128):
+        return ""
+
+
 def test_extended_ask_with_stub(indexed):
     ix, _ = indexed
     ea = ExtendedAsk(ix.cfg, ix.db, _vs(ix), ix.embedder, chat=StubChat(),
@@ -37,6 +44,19 @@ def test_extended_ask_with_stub(indexed):
     assert all(len(r.agents) <= 3 for r in ans.rounds)
     assert len(ans.rounds) <= 10
     assert ans.stats["llm_calls"] > 0
+
+
+def test_extended_ask_empty_chat_keeps_configured_search_shape(indexed):
+    ix, _ = indexed
+    ea = ExtendedAsk(ix.cfg, ix.db, _vs(ix), ix.embedder, chat=EmptyChat(),
+                     keyword_rounds=4, keywords_per_round=4,
+                     agents_per_round=3, max_rounds=3)
+    ans = ea.run("what is the deepask action flow in this indexer")
+    assert len(ans.keywords) == 4
+    assert all(1 <= len(kws) <= 4 for kws in ans.keywords)
+    assert len({kw for kws in ans.keywords for kw in kws}) > 1
+    assert len(ans.focuses) == 3
+    assert len(ans.rounds[0].agents) == 3
 
 
 def test_extended_ask_retrieval_only(indexed):

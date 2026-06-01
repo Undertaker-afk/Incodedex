@@ -109,8 +109,11 @@ node-by-node → 10. Incremental watcher for updates.
 
 ```bash
 python -m venv .venv && . .venv/bin/activate
+# Use Python 3.10-3.12 for best tree-sitter wheel compatibility on Windows.
 pip install -r requirements.txt          # core
 pip install -e .                          # the `graphindex` CLI
+# optional: tree-sitter Dart parser for Dart files
+pip install -e .[dart]
 # optional: real local models + acceleration
 pip install -r requirements-optional.txt  # llama-cpp-python, faiss-cpu, mcp
 ```

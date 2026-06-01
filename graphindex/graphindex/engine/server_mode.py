@@ -9,11 +9,46 @@ and faster path; server mode is provided for power users / distributed setups.
 
 from __future__ import annotations
 
+import atexit
 import subprocess
 import sys
+import threading
 import time
 from urllib import request, error
 import json
+
+
+# Track every llama_cpp.server subprocess we spawn so an atexit hook can stop
+# them. Without this, a crashed parent leaves orphan model servers running
+# (holding GPU/RAM + ports) until the user kills them manually.
+_PROCS: list[subprocess.Popen] = []
+_PROCS_LOCK = threading.Lock()
+
+
+def _stop_all() -> None:
+    with _PROCS_LOCK:
+        procs = list(_PROCS)
+        _PROCS.clear()
+    for p in procs:
+        if p.poll() is not None:
+            continue
+        try:
+            p.terminate()
+        except Exception:
+            pass
+    for p in procs:
+        if p.poll() is not None:
+            continue
+        try:
+            p.wait(timeout=5)
+        except Exception:
+            try:
+                p.kill()
+            except Exception:
+                pass
+
+
+atexit.register(_stop_all)
 
 
 def start_server(model_path: str, host: str = "127.0.0.1", port: int = 8081,
@@ -25,7 +60,26 @@ def start_server(model_path: str, host: str = "127.0.0.1", port: int = 8081,
         cmd += ["--embedding", "true"]
     if extra:
         cmd += extra
-    return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    with _PROCS_LOCK:
+        _PROCS.append(proc)
+    return proc
+
+
+def stop_server(proc: subprocess.Popen) -> None:
+    """Explicitly terminate a server started by :func:`start_server`."""
+    with _PROCS_LOCK:
+        if proc in _PROCS:
+            _PROCS.remove(proc)
+    if proc.poll() is None:
+        try:
+            proc.terminate()
+            proc.wait(timeout=5)
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
 
 
 def wait_ready(host: str, port: int, timeout: float = 60.0) -> bool:

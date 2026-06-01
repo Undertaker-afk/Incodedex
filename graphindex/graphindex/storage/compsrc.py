@@ -6,10 +6,13 @@ in a dedicated cache directory.
 
 from __future__ import annotations
 
-import json
 import hashlib
+import json
+import logging
 import zlib
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 
 class CompSrc:
@@ -38,8 +41,8 @@ class CompSrc:
         compressed = zlib.compress(raw)
         try:
             self._path(node_id).write_bytes(compressed)
-        except Exception:
-            pass
+        except OSError as exc:
+            log.warning("compsrc.store failed for %s: %s", node_id, exc)
 
     def add_to_batch(self, node_id: str, code: str | None, summary: str = "", language: str = "") -> None:
         """Buffer a node for batch storage."""
@@ -59,7 +62,8 @@ class CompSrc:
             compressed = zlib.compress(raw)
             try:
                 self._path(node_id).write_bytes(compressed)
-            except Exception:
+            except OSError as exc:
+                log.warning("compsrc.flush_batch failed for %s: %s", node_id, exc)
                 continue
         self._batch.clear()
 
@@ -72,7 +76,8 @@ class CompSrc:
             compressed = path.read_bytes()
             raw = zlib.decompress(compressed)
             return json.loads(raw.decode("utf-8"))
-        except Exception:
+        except (OSError, zlib.error, json.JSONDecodeError, UnicodeDecodeError) as exc:
+            log.warning("compsrc.retrieve failed for %s: %s", node_id, exc)
             return None
 
     def get_source_with_summary(self, node_id: str) -> str | None:
@@ -113,6 +118,6 @@ class CompSrc:
                 try:
                     p.unlink()
                     deleted += 1
-                except Exception:
-                    pass
+                except OSError as exc:
+                    log.warning("compsrc.prune_stale: %s: %s", p, exc)
         return deleted

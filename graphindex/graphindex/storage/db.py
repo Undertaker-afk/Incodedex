@@ -144,12 +144,24 @@ class GraphDB:
     def update_node_state(self, node_id: str, state: str) -> None:
         self.conn.execute("UPDATE nodes SET state=? WHERE id=?", (state, node_id))
 
+    # Whitelist of columns that ``update_node_fields`` is allowed to set.
+    # Built from the node schema; anything not in this set is rejected to
+    # prevent SQL injection via attacker-controlled keys (the column name is
+    # interpolated into the UPDATE statement and cannot be parameterized).
+    _UPDATABLE_NODE_COLS = frozenset({
+        "kind", "name", "path", "language", "start_line", "end_line",
+        "signature", "params", "search_string", "type_hint", "summary",
+        "tags", "state", "degree", "flags", "commit_id", "extra",
+    })
+
     @_locked
     def update_node_fields(self, node_id: str, **fields: Any) -> None:
         if not fields:
             return
         cols, vals = [], []
         for k, v in fields.items():
+            if k not in self._UPDATABLE_NODE_COLS:
+                raise ValueError(f"update_node_fields: column {k!r} not allowed")
             cols.append(f"{k}=?")
             vals.append(_dumps(v) if isinstance(v, (list, dict)) else v)
         vals.append(node_id)

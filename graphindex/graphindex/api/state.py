@@ -25,6 +25,9 @@ class AppState:
         self.bus = EventBus()
         self.index_lock = threading.Lock()
         self.ask_lock = threading.Lock()
+        # Guards the ``reload`` swap so in-flight request threads (which read
+        # ``self.db``/``self.vectors``) never see a half-rebuilt state.
+        self._reload_lock = threading.Lock()
         self.indexing = False
         self.asking = False
         self.watcher = None
@@ -32,17 +35,20 @@ class AppState:
         self.compsrc = CompSrc(cfg.repo_path)
         self._open()
 
+    def _build(self):
+        """Construct a fresh set of read-side components. Pure: no self mutation."""
+        db = GraphDB(self.cfg.db_path)
+        dim = db.get_meta("embed_dim", self.cfg.embed_dim) or self.cfg.embed_dim
+        vectors = VectorStore(self.cfg.vectors_path, dim)
+        embedder = get_embedder(self.cfg)
+        search_engine = SearchEngine(db, vectors, embedder)
+        chat = get_chat(self.cfg)
+        ask_engine = AskEngine(self.cfg, db, vectors, embedder, chat=chat)
+        return db, vectors, embedder, search_engine, chat, ask_engine
+
     def _open(self) -> None:
-        self.db = GraphDB(self.cfg.db_path)
-        dim = self.db.get_meta("embed_dim", self.cfg.embed_dim) or self.cfg.embed_dim
-        self.vectors = VectorStore(self.cfg.vectors_path, dim)
-        # Embedder for query-time semantic search (lazy/real or fallback).
-        self.embedder = get_embedder(self.cfg)
-        self.search_engine = SearchEngine(self.db, self.vectors, self.embedder)
-        # Chat model is loaded lazily on first ask; building the engine is cheap.
-        self.chat = get_chat(self.cfg)
-        self.ask_engine = AskEngine(self.cfg, self.db, self.vectors,
-                                    self.embedder, chat=self.chat)
+        (self.db, self.vectors, self.embedder, self.search_engine,
+         self.chat, self.ask_engine) = self._build()
 
     def build_extended(self, opts: dict, bus) -> ExtendedAsk:
         """Construct an ExtendedAsk orchestrator with caps from the request."""
@@ -55,9 +61,34 @@ class AppState:
         )
 
     def reload(self) -> None:
-        """Re-open read components (call after an index run completes)."""
+        """Re-open read components after an index run.
+
+        Builds the new components first, then atomically swaps the public
+        attributes and closes the *old* DB last. This way an in-flight request
+        thread that already captured ``self.db`` keeps a valid connection until
+        it finishes; new requests pick up the fresh state.
+        """
+        with self._reload_lock:
+            try:
+                new = self._build()
+            except Exception:
+                # If rebuild fails, keep the current state intact rather than
+                # leaving the server with a closed/missing DB.
+                raise
+            old_db = self.db
+            (self.db, self.vectors, self.embedder, self.search_engine,
+             self.chat, self.ask_engine) = new
+        # Delay closing the old connection so any concurrent read has a chance
+        # to finish. SQLite connections are cheap; this is a best-effort grace
+        # period rather than a hard sync point.
         try:
-            self.db.close()
+            threading.Timer(2.0, lambda: _safe_close(old_db)).start()
         except Exception:
-            pass
-        self._open()
+            _safe_close(old_db)
+
+
+def _safe_close(db) -> None:
+    try:
+        db.close()
+    except Exception:
+        pass

@@ -129,7 +129,9 @@ def install_graphindex_into_python(
     print(f"[stage] pip install {spec}")
     subprocess.run(
         [str(python_exe), "-m", "pip", "install", "--no-warn-script-location",
-         "--disable-pip-version-check", spec],
+         "--disable-pip-version-check",
+         "--extra-index-url", "https://abetlen.github.io/llama-cpp-python/whl/cpu",
+         spec],
         check=True,
     )
 

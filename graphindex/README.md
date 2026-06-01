@@ -107,19 +107,48 @@ node-by-node → 10. Incremental watcher for updates.
 
 ## Install
 
+graphindex is a normal Python package with a `graphindex` console-script entry
+point. The base install gives you the full CLI, WebUI and pipeline — it uses
+the deterministic fallback backend for embeddings + summaries so it runs
+anywhere, with zero model downloads.
+
 ```bash
-python -m venv .venv && . .venv/bin/activate
-# Use Python 3.10-3.12 for best tree-sitter wheel compatibility on Windows.
-pip install -r requirements.txt          # core
-pip install -e .                          # the `graphindex` CLI
-# optional: tree-sitter Dart parser for Dart files
-pip install -e .[dart]
-# optional: real local models + acceleration
-pip install -r requirements-optional.txt  # llama-cpp-python, faiss-cpu, mcp
+# 1) Create a venv (Python 3.10-3.12 recommended; 3.13+ may lack tree-sitter
+#    wheels for some grammars).
+python -m venv .venv
+# Windows:
+.venv\Scripts\activate
+# Linux / macOS:
+source .venv/bin/activate
+
+# 2) Install graphindex itself
+pip install graphindex                     # from PyPI
+# or, from a clone of this repo:
+# pip install -e .
+
+# 3) (Optional) Real local LLM + fast vector search
+#    Uses the prebuilt CPU wheel of llama.cpp — no C++ toolchain needed.
+#    On Windows / Linux / macOS use the abetlen extra-index-url; the PyPI
+#    sdist of llama-cpp-python needs a compiler.
+pip install --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu \
+            "graphindex[llama,faiss]"
+# Everything at once:
+# pip install --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu \
+#             "graphindex[all]"
 ```
 
-`graphindex setup <repo>` will auto-install the llama.cpp runtime and download
-the GGUF models (`Qwen/Qwen3-Embedding-0.6B-GGUF`,
+After install, `graphindex` is on your `PATH` — open any cmd / PowerShell /
+bash, `cd` into a repo, and run:
+
+```bash
+graphindex setup .        # one-time: download GGUF models (~1.2 GB total)
+graphindex index .        # build the index (streams live progress)
+graphindex serve . --watch   # WebUI at http://localhost:8000
+graphindex ask . "what does the bump function do"
+```
+
+`graphindex setup <repo>` auto-installs the llama.cpp runtime (when missing)
+and downloads the GGUF models (`Qwen/Qwen3-Embedding-0.6B-GGUF`,
 `LiquidAI/LFM2.5-1.2B-Instruct-GGUF`) to `~/.cache/graphindex/models`.
 
 ### Model backends (`--backend`)

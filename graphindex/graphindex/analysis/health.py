@@ -8,6 +8,7 @@ from ..config import Config
 from ..graph.model import NodeKind
 from ..storage.db import GraphDB
 from ..storage.vectors import VectorStore
+from ..storage.compsrc import CompSrc
 
 
 def health_report(db: GraphDB) -> dict:
@@ -41,4 +42,10 @@ def prune_deleted_files(cfg: Config, db: GraphDB, vectors: VectorStore | None = 
     if vectors is not None and removed_nodes:
         vectors.remove(set(removed_nodes))
         vectors.save()
-    return {"removed_files": removed_files, "removed_nodes": len(removed_nodes)}
+
+    # Prune stale source cache
+    compsrc = CompSrc(cfg.repo_path)
+    active_ids = {n.id for n in db.iter_nodes()}
+    removed_cache = compsrc.prune_stale(active_ids)
+
+    return {"removed_files": removed_files, "removed_nodes": len(removed_nodes), "removed_cache": removed_cache}

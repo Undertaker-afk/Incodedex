@@ -1,0 +1,38 @@
+graphindex serving at http://127.0.0.1:8000
+  API: http://127.0.0.1:8000/api/graph   WebUI: http://127.0.0.1:8000/
+Werkzeug appears to be used in a production deployment. Consider switching to a production web server instead.
+ * Serving Flask app 'graphindex.api.server'
+ * Debug mode: off
+[31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:8000
+[33mPress CTRL+C to quit[0m
+127.0.0.1 - - [01/Jun/2026 11:47:03] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [01/Jun/2026 11:47:03] "GET /assets/index-BtH780bS.css HTTP/1.1" 200 -
+127.0.0.1 - - [01/Jun/2026 11:47:03] "GET /assets/index-DM4kmzM3.js HTTP/1.1" 200 -
+127.0.0.1 - - [01/Jun/2026 11:47:03] "GET /api/config HTTP/1.1" 200 -
+127.0.0.1 - - [01/Jun/2026 11:47:04] "GET /api/graph HTTP/1.1" 200 -
+127.0.0.1 - - [01/Jun/2026 11:47:06] "GET /api/search?q=Indexer&semantic=true HTTP/1.1" 200 -
+127.0.0.1 - - [01/Jun/2026 11:47:08] "GET /api/node/1cdc7696f7fdcaaa HTTP/1.1" 200 -
+127.0.0.1 - - [01/Jun/2026 11:47:08] "GET /api/node/1cdc7696f7fdcaaa/source HTTP/1.1" 200 -
+127.0.0.1 - - [01/Jun/2026 11:47:12] "[35m[1mGET /socket.io/?EIO=4&transport=websocket HTTP/1.1[0m" 500 -
+127.0.0.1 - - [01/Jun/2026 11:47:12] "[35m[1mGET /socket.io/?EIO=4&transport=websocket HTTP/1.1[0m" 500 -
+Error on request:
+Traceback (most recent call last):
+  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/werkzeug/serving.py", line 371, in run_wsgi
+    execute(self.server.app)
+  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/werkzeug/serving.py", line 337, in execute
+    write(b"")
+  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/werkzeug/serving.py", line 262, in write
+    assert status_set is not None, "write() before start_response"
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: write() before start_response
+Error on request:
+Traceback (most recent call last):
+  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/werkzeug/serving.py", line 371, in run_wsgi
+    execute(self.server.app)
+  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/werkzeug/serving.py", line 337, in execute
+    write(b"")
+  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/werkzeug/serving.py", line 262, in write
+    assert status_set is not None, "write() before start_response"
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: write() before start_response

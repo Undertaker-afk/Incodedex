@@ -5,6 +5,7 @@ Endpoints (all under ``/api``):
 * ``GET  /health``        – index health metrics
 * ``GET  /graph``         – nodes + edges for the visualization (limited)
 * ``GET  /node/<id>``     – node detail + code intelligence (defs/refs/calls/inheritance)
+* ``GET  /node/<id>/source`` – cached source code with inline summary
 * ``GET  /search``        – regex / semantic / fuzzy / filtered / scoped search
 * ``GET  /stats``         – languages, dependencies, dead code, duplicates
 * ``POST /index``         – (re)build the index in the background (streams via WS)
@@ -119,6 +120,26 @@ def node_detail(node_id):
         "descendants": [x.to_dict() for x in inh["descendants"]],
         "references": [x.to_dict() for x in refs],
     })
+
+
+@bp.get("/node/<node_id>/source")
+def node_source(node_id):
+    st = _state()
+    try:
+        source = st.compsrc.get_source_with_summary(node_id)
+    except ValueError:
+        return jsonify({"error": "invalid node id"}), 400
+
+    if source is None:
+        # Fallback to DB node code if exists
+        n = st.db.get_node(node_id)
+        if n and n.code:
+            source = n.code
+
+    if source is None:
+        return jsonify({"error": "source not found"}), 404
+
+    return jsonify({"source": source})
 
 
 @bp.get("/search")

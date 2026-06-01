@@ -40,6 +40,12 @@ _GRAMMAR_LOADERS: dict[str, Callable[[], Any]] = {
     "cpp": _loader("tree_sitter_cpp"),
     "c_sharp": _loader("tree_sitter_c_sharp"),
     "php": _loader("tree_sitter_php", "language_php"),
+    "zig": _loader("tree_sitter_zig"),
+    "kotlin": _loader("tree_sitter_kotlin"),
+    "bash": _loader("tree_sitter_bash"),
+    "dart": _loader("tree_sitter_dart"),
+    "lua": _loader("tree_sitter_lua"),
+    "sql": _loader("tree_sitter_sql"),
 }
 
 

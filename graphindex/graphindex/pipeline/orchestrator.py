@@ -36,6 +36,7 @@ from ..parsing.symbols import extract_symbols
 from ..scanner.walker import RepoScanner, current_commit
 from ..storage.db import GraphDB
 from ..storage.vectors import VectorStore
+from ..storage.compsrc import CompSrc
 from ..summarize import get_summarizer
 from . import events as E
 from .events import EventBus
@@ -50,12 +51,13 @@ _SUMMARIZABLE = {NodeKind.CLASS.value, NodeKind.INTERFACE.value,
 
 class Indexer:
     def __init__(self, cfg: Config, bus: EventBus | None = None,
-                 embedder=None, summarizer=None, do_summarize: bool = True,
-                 do_embed: bool = True):
+                 embedder=None, summarizer=None, compsrc=None,
+                 do_summarize: bool = True, do_embed: bool = True):
         self.cfg = cfg
         self.bus = bus or EventBus()
         self.cfg.ensure_dirs()
         self.db = GraphDB(cfg.db_path)
+        self.compsrc = compsrc if compsrc is not None else CompSrc(cfg.repo_path)
         self.embedder = embedder if embedder is not None else get_embedder(cfg)
         self.dim = getattr(self.embedder, "dim", cfg.embed_dim) or cfg.embed_dim
         self.vectors = VectorStore(cfg.vectors_path, self.dim)
@@ -107,9 +109,16 @@ class Indexer:
                 continue
             fb = build_file(rec, parsed, commit=self.commit)
             # announce discovered (gray), then mark parsed (yellow)
+            source_decoded = source.decode("utf-8", "ignore")
             for n in fb.nodes:
                 graph.add_node(n)
                 self._emit_node_add(n)
+
+                # Cache raw source for all discovered nodes (files and symbols)
+                # Symbols should NOT fall back to the entire file source.
+                code_to_store = source_decoded if n.kind == NodeKind.FILE.value else (n.code or "")
+                self.compsrc.add_to_batch(n.id, code_to_store, language=n.language)
+
             for n in fb.nodes:
                 # canonical searchable text (also the embedding input) — stored
                 if n.kind in _EMBEDDABLE:
@@ -122,6 +131,9 @@ class Indexer:
             all_refs.extend(fb.refs)
             self.db.upsert_file(rec.rel_path, rec.language, rec.size, rec.mtime,
                                 rec.sha, self.commit)
+
+        # Flush CompSrc batch after parsing
+        self.compsrc.flush_batch()
 
         # ---- phase 3: resolve references ----
         self.bus.emit(E.PHASE, phase="resolve", message="Resolving references")
@@ -154,10 +166,16 @@ class Indexer:
                 try:
                     summary, tags = self.summarizer.summarize(n)
                     n.summary, n.tags = summary, tags
+
+                    # Update cache with summary. Preserve existing code.
+                    cached = self.compsrc.retrieve(n.id)
+                    code = cached.get("code") if cached else n.code
+                    self.compsrc.add_to_batch(n.id, code, summary=n.summary, language=n.language)
                 except Exception:
                     errors += 1
                 n.state = NodeState.SUMMARIZED.value
                 self._emit_node_update(n)
+            self.compsrc.flush_batch()
 
         # ---- analysis overlays: duplicates + dead code (purple outline) ----
         self.bus.emit(E.PHASE, phase="analyze", message="Detecting duplicates & dead code")

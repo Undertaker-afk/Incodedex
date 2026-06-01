@@ -23,6 +23,7 @@ export const api = {
   config: () => getJSON('/api/config'),
   stats: () => getJSON('/api/stats'),
   node: (id) => getJSON(`/api/node/${id}`),
+  nodeSource: (id) => getJSON(`/api/node/${id}/source`),
   search: (q, opts = {}) => {
     const p = new URLSearchParams({ q, ...opts })
     return getJSON(`/api/search?${p.toString()}`)

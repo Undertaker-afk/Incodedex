@@ -31,7 +31,7 @@ def get_chat(cfg: Config):
     try:
         from ..engine.llama_engine import LlamaEngine
         eng = LlamaEngine(cfg)
-        if LlamaEngine.runtime_available() and eng.local_chat_model() is not None:
+        if LlamaEngine.runtime_available() and eng.chat_model_path() is not None:
             return eng
     except Exception:
         return None

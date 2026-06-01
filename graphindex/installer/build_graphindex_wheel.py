@@ -101,6 +101,7 @@ def main() -> int:
     p.add_argument("--rebuild-frontend", action="store_true",
                    help="Force a fresh `npm run build` even if dist/ exists.")
     args = p.parse_args()
+    args.out_dir = args.out_dir.resolve()
 
     build_frontend(skip=args.skip_frontend)
     copy_frontend_into_package()

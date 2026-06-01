@@ -4,6 +4,7 @@ import Sidebar from './components/Sidebar'
 import SearchBar from './components/SearchBar'
 import NodeInspector from './components/NodeInspector'
 import AskPanel from './components/AskPanel'
+import ExtendedAskPanel from './components/ExtendedAskPanel'
 import { useGraphStream } from './hooks/useGraphStream'
 import { api } from './api/client'
 
@@ -43,11 +44,15 @@ export default function App() {
           <button className={tab === 'inspect' ? 'tab on' : 'tab'}
             onClick={() => setTab('inspect')}>Inspector</button>
           <button className={tab === 'ask' ? 'tab on' : 'tab'}
-            onClick={() => setTab('ask')}>Ask codebase</button>
+            onClick={() => setTab('ask')}>Ask</button>
+          <button className={tab === 'deep' ? 'tab on' : 'tab'}
+            onClick={() => setTab('deep')}>Deep ask</button>
         </div>
-        {tab === 'inspect'
-          ? <NodeInspector nodeId={selected} onSelect={selectById} />
-          : <AskPanel onSelect={selectById} />}
+        <div className="right-content">
+          {tab === 'inspect' && <NodeInspector nodeId={selected} onSelect={selectById} />}
+          {tab === 'ask' && <AskPanel onSelect={selectById} />}
+          {tab === 'deep' && <ExtendedAskPanel onSelect={selectById} />}
+        </div>
       </div>
     </div>
   )

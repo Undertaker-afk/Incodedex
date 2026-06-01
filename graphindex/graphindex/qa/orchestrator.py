@@ -198,6 +198,10 @@ class ExtendedAsk:
         briefs: dict[str, dict] = {}
         for d in self.tools.search(focus, k=self.candidates_per_focus):
             briefs[d["id"]] = d
+        # Seed with the keyword-round candidate pool so agents always have real
+        # symbols to reason over, even when an abstract focus retrieves little.
+        for d in getattr(self, "pool", [])[:6]:
+            briefs.setdefault(d["id"], d)
         # expand requested structures
         for nid in seeds.get("want_nodes", [])[:6]:
             s = self.tools.structure(nid)
@@ -258,7 +262,7 @@ class ExtendedAsk:
                              backend=getattr(self.chat, "name", None)
                              or (self.chat.__class__.__name__ if self.chat else "retrieval-only"))
         self._emit("ext_phase", phase="keywords", message="Generating search keywords")
-        ans.keywords, _pool = self._keyword_rounds(question)
+        ans.keywords, self.pool = self._keyword_rounds(question)
 
         self._emit("ext_phase", phase="plan", message="Planning investigation focuses")
         ans.focuses = self._focuses(question)

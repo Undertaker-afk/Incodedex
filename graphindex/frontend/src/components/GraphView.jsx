@@ -11,8 +11,8 @@ export default function GraphView({ nodes, links, onSelect, selectedId }) {
   useEffect(() => {
     const fg = fgRef.current
     if (!fg) return
-    fg.d3Force('charge')?.strength(-40)
-    fg.d3Force('link')?.distance(28)
+    fg.d3Force('charge')?.strength(-55)
+    fg.d3Force('link')?.distance(30)
   }, [])
 
   return (
@@ -20,9 +20,15 @@ export default function GraphView({ nodes, links, onSelect, selectedId }) {
       ref={fgRef}
       graphData={data}
       backgroundColor="#0d1117"
-      cooldownTicks={120}
-      warmupTicks={20}
+      // settle quickly and STOP so nodes are easy to click/read (no perpetual spin)
+      cooldownTicks={80}
+      cooldownTime={4000}
+      warmupTicks={30}
+      d3AlphaDecay={0.045}
+      d3VelocityDecay={0.55}
       nodeRelSize={3}
+      enableNodeDrag={true}
+      onNodeDragEnd={(n) => { n.fx = n.x; n.fy = n.y }}  // pin where dropped
       nodeLabel={(n) => `${n.kind}: ${n.label || n.id}\n${n.path || ''}`}
       linkColor={(l) => (l.resolved === false ? 'rgba(240,136,62,0.35)' : 'rgba(140,150,170,0.22)')}
       linkWidth={(l) => (l.kind === 'inherits' ? 1.4 : 0.6)}

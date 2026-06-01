@@ -29,11 +29,20 @@ export const api = {
   },
   index: (opts) => postJSON('/api/index', opts),
   prune: () => postJSON('/api/prune', {}),
+  ask: (q, k = 8) => postJSON('/api/ask', { question: q, k }),
+  extendedAsk: (opts) => postJSON('/api/extended_ask', opts),
 }
 
 export function connectSocket(onEvent, onHello) {
   const socket = io(BASE || '/', { transports: ['websocket', 'polling'] })
   socket.on('index_event', onEvent)
   if (onHello) socket.on('hello', onHello)
+  return socket
+}
+
+// Separate listener for extended_ask streaming (the "ext_event" channel).
+export function connectExtSocket(onEvent) {
+  const socket = io(BASE || '/', { transports: ['websocket', 'polling'] })
+  socket.on('ext_event', onEvent)
   return socket
 }

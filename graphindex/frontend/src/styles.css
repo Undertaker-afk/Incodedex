@@ -17,7 +17,8 @@ body { background: var(--bg); color: var(--text);
   background: var(--panel2); overflow: hidden; }
 .center { display: flex; flex-direction: column; min-width: 0; }
 .right { border-left: 1px solid var(--border); background: var(--panel2);
-  overflow-y: auto; }
+  display: flex; flex-direction: column; min-height: 0; }
+.right-content { flex: 1; overflow-y: auto; min-height: 0; }
 
 /* sidebar */
 .sidebar { padding: 14px; border-bottom: 1px solid var(--border); }
@@ -117,3 +118,17 @@ button:disabled { opacity: .55; cursor: default; }
 .aref:hover .arname { color: #fff; }
 .refnum { color: var(--accent); font-weight: 700; margin-right: 6px; }
 .arname { font-weight: 600; margin-left: 6px; }
+
+/* extended ask */
+.caps { display: flex; gap: 8px; }
+.caps label { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 4px; }
+.caps input { width: 44px; background: var(--panel); border: 1px solid var(--border);
+  color: var(--text); border-radius: 5px; padding: 3px 5px; }
+.kwbox { margin-top: 8px; }
+.activity { margin-top: 10px; }
+.act { font-size: 12px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+.act.start { color: var(--muted); }
+.act.done { color: #7ee787; }
+.actfind { color: var(--text); font-size: 11px; margin-top: 2px; padding-left: 12px; }
+.savings { background: #1f6feb1a; border: 1px solid #1f6feb55; border-radius: 6px;
+  padding: 6px 8px; font-size: 11px; color: #79c0ff; margin: 8px 0; line-height: 1.5; }

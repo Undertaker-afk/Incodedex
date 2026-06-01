@@ -65,9 +65,11 @@ def step_download_python(*, skip: bool, out_dir: Path) -> Path:
 
 def step_build_wheel(*, skip_frontend: bool, wheel_out: Path) -> Path:
     print("\n=== Step 2/5: build graphindex wheel (with frontend bundled) ===")
-    _run([sys.executable, str(INSTALLER_DIR / "build_graphindex_wheel.py"),
-          "--out-dir", str(wheel_out),
-          "--skip-frontend" if skip_frontend else ""])
+    cmd = [sys.executable, str(INSTALLER_DIR / "build_graphindex_wheel.py"),
+           "--out-dir", str(wheel_out)]
+    if skip_frontend:
+        cmd.append("--skip-frontend")
+    _run(cmd)
     # .with_suffix('') avoids argparse swallowing "" into positional.
     wheels = sorted(wheel_out.glob("graphindex-*.whl"))
     if not wheels:

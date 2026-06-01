@@ -14,6 +14,8 @@ Commands:
 from __future__ import annotations
 
 import json
+import logging
+import os
 import sys
 from pathlib import Path
 
@@ -30,6 +32,33 @@ except ImportError:  # pragma: no cover
     from graphindex.config import load_config
 
 console = Console()
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    val = os.environ.get(name)
+    if val is None:
+        return default
+    return val.strip().lower() in ("1", "true", "yes", "on")
+
+
+def configure_serve_logging() -> None:
+    """Quiet the per-request access log spam from Werkzeug / Engine.IO / Socket.IO.
+
+    ``graphindex serve`` is the kind of command that runs for hours; the
+    default Werkzeug dev server logs every HTTP and Engine.IO polling request,
+    which buries actual progress output. We silence those loggers unless the
+    user explicitly opts in via ``GRAPHINDEX_ACCESS_LOG=1``.
+    """
+    if not _env_flag("GRAPHINDEX_ACCESS_LOG"):
+        for name in ("werkzeug", "engineio", "engineio.server", "socketio",
+                     "socketio.server", "geventwebsocket"):
+            logging.getLogger(name).setLevel(logging.WARNING)
+    level_name = os.environ.get("GRAPHINDEX_LOG_LEVEL", "INFO").upper()
+    logging.basicConfig(
+        level=getattr(logging, level_name, logging.INFO),
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        force=False,
+    )
 
 
 def _cfg(repo, **kw):
@@ -120,6 +149,7 @@ def search(query, repo, regex, semantic, fuzzy, case, top, as_json):
 @click.option("--watch", is_flag=True, help="Also watch for changes.")
 def serve(repo, host, port, backend, watch):
     """Run the API + live WebUI server."""
+    configure_serve_logging()
     from graphindex.api.server import create_app
     cfg = _cfg(repo, host=host, port=port, backend=backend)
     app, socketio = create_app(cfg)

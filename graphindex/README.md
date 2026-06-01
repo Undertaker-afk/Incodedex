@@ -179,3 +179,11 @@ Embedding/summarization speed depends on the llama.cpp build. The generic CPU
 wheel is portable but slow for large files; for production use a BLAS/AVX or
 CUDA/Metal `llama-cpp-python` build (or the `hf` backend) for a large speedup.
 The deterministic fallback backend is always instant.
+
+### Environment variables (logging & verbosity)
+| Var | Default | Effect |
+|-----|---------|--------|
+| `GRAPHINDEX_LOG_LEVEL` | `INFO` | Root Python logging level. |
+| `GRAPHINDEX_ACCESS_LOG` | off | Set `1` to re-enable the per-request access log from Werkzeug/Engine.IO/Socket.IO that `graphindex serve` silences by default. |
+| `GRAPHINDEX_LLAMA_LOG` | `error` | Verbosity of the embedded llama.cpp C logs: `silent` \| `error` \| `warn` \| `info` \| `debug`. |
+| `GRAPHINDEX_LLAMA_LOG_SUPPRESS` | `1` | When `1`, well-known benign warnings (e.g. `llama_context: n_ctx_seq (2048) < n_ctx_train (32768) -- the full capacity of the model will not be utilized`) are dropped and any identical message is printed at most once per process. Set to `0` to see every occurrence. |

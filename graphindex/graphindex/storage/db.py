@@ -166,6 +166,9 @@ class GraphDB:
             vals.append(_dumps(v) if isinstance(v, (list, dict)) else v)
         vals.append(node_id)
         self.conn.execute(f"UPDATE nodes SET {','.join(cols)} WHERE id=?", vals)
+        # DML opens an implicit transaction; commit so changes persist and the
+        # write lock is released (otherwise other writers block forever).
+        self.conn.commit()
 
     @_locked
     def get_node(self, node_id: str) -> Node | None:

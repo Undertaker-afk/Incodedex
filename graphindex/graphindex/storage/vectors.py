@@ -88,7 +88,15 @@ class VectorStore:
 
     # -- mutation ---------------------------------------------------------
     def add(self, node_id: str, vector: np.ndarray | list[float]) -> None:
-        vec = _normalize(np.asarray(vector, dtype="float32").reshape(1, -1))
+        raw = np.asarray(vector, dtype="float32").reshape(1, -1)
+        # Validate dimension BEFORE mutating any state so a bad input cannot
+        # leave ids / _id_to_idx / _matrix / FAISS index in an inconsistent
+        # state (which would later surface as a cryptic IndexError).
+        if raw.shape[1] != self.dim:
+            raise ValueError(
+                f"VectorStore.add: dimension mismatch (got {raw.shape[1]}, "
+                f"expected {self.dim})")
+        vec = _normalize(raw)
         with self._lock:
             idx = self._id_to_idx.get(node_id)
             if idx is not None:
@@ -133,7 +141,12 @@ class VectorStore:
     # -- query ------------------------------------------------------------
     def search(self, vector: np.ndarray | list[float], top_k: int = 20
                ) -> list[tuple[str, float]]:
-        q = _normalize(np.asarray(vector, dtype="float32").reshape(1, -1))
+        raw = np.asarray(vector, dtype="float32").reshape(1, -1)
+        if raw.shape[1] != self.dim:
+            raise ValueError(
+                f"VectorStore.search: dimension mismatch (got {raw.shape[1]}, "
+                f"expected {self.dim})")
+        q = _normalize(raw)
         with self._lock:
             if not self.ids:
                 return []

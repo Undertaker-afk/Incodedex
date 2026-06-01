@@ -34,8 +34,14 @@ export const api = {
   extendedAsk: (opts) => postJSON('/api/extended_ask', opts),
 }
 
+// Long-polling only: the server runs Flask-SocketIO under Werkzeug's
+// threading mode, which does not handle the websocket transport reliably
+// (server-side returns 500 "write() before start_response"). Polling is the
+// supported transport for this deployment.
+const SOCKET_OPTS = { transports: ['polling'], upgrade: false }
+
 export function connectSocket(onEvent, onHello) {
-  const socket = io(BASE || '/', { transports: ['websocket', 'polling'] })
+  const socket = io(BASE || '/', SOCKET_OPTS)
   socket.on('index_event', onEvent)
   if (onHello) socket.on('hello', onHello)
   return socket
@@ -43,7 +49,7 @@ export function connectSocket(onEvent, onHello) {
 
 // Separate listener for extended_ask streaming (the "ext_event" channel).
 export function connectExtSocket(onEvent) {
-  const socket = io(BASE || '/', { transports: ['websocket', 'polling'] })
+  const socket = io(BASE || '/', SOCKET_OPTS)
   socket.on('ext_event', onEvent)
   return socket
 }

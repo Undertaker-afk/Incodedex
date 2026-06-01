@@ -9,9 +9,11 @@ consumes so the live graph updates in place.
 
 from __future__ import annotations
 
+import logging
 import os
 import threading
 import time
+from typing import Callable, Optional
 
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
@@ -22,6 +24,8 @@ from ..pipeline.events import EventBus
 from ..pipeline.orchestrator import Indexer
 from ..scanner.ignore import IgnoreEngine
 from ..scanner.walker import detect_language
+
+log = logging.getLogger(__name__)
 
 
 class _Handler(FileSystemEventHandler):
@@ -40,8 +44,8 @@ class _Handler(FileSystemEventHandler):
 class RepoWatcher:
     def __init__(self, cfg: Config, bus: EventBus | None = None,
                  debounce: float = 1.0, do_summarize: bool = False,
-                 index_lock: threading.Lock | None = None,
-                 on_reload: "callable | None" = None):
+                 index_lock: Optional["threading.Lock"] = None,
+                 on_reload: Optional[Callable[[], None]] = None):
         self.cfg = cfg
         self.bus = bus or EventBus()
         self.debounce = debounce
@@ -107,23 +111,35 @@ class RepoWatcher:
                 #    rows, leaving the explicit loop nothing to report and the
                 #    UI graph stale).
                 existing = [c for c in changed if (self.cfg.repo_path / c).exists()]
+                removed_any = False
                 for path in changed:
                     if not (self.cfg.repo_path / path).exists():
                         ids = indexer.db.delete_file(path)
-                        indexer.vectors.remove(set(ids))
+                        if ids:
+                            indexer.vectors.remove(set(ids))
+                            removed_any = True
                         for nid in ids:
                             self.bus.emit("node_remove", id=nid)
                 # 2) Catch any other files deleted outside the changed set.
+                #    (prune_deleted_files persists vectors itself when it
+                #    removes any nodes; we only need to handle the case where
+                #    our own loop above removed vectors but prune found nothing.)
                 prune_deleted_files(self.cfg, indexer.db, indexer.vectors)
                 if existing:
                     indexer.index(only_changed=existing)
+                elif removed_any:
+                    # Indexer.index() is what normally persists vectors. When
+                    # the batch was purely deletions from the changed set, we
+                    # must save here or the removals reappear after a restart.
+                    indexer.vectors.save()
             finally:
                 indexer.db.close()
             if self._on_reload:
                 try:
                     self._on_reload()
-                except Exception:
-                    pass
+                except Exception as exc:
+                    log.exception("on_reload callback failed: %s", exc)
+                    self.bus.emit("log", message=f"reload failed: {exc}")
         finally:
             if lock is not None:
                 lock.release()

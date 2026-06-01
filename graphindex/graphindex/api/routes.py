@@ -149,6 +149,16 @@ def node_source(node_id):
                     source = on_disk.read_text(encoding="utf-8", errors="replace")
             except (OSError, ValueError):
                 source = None
+        elif n and n.kind == NodeKind.EXTERNAL.value:
+            # External package / unresolved import target — by definition there
+            # is no in-repo source. Return a small placeholder so the editor
+            # renders an empty body instead of an error overlay.
+            source = (
+                f"// {n.name}\n"
+                f"// External symbol: no in-repo source available.\n"
+                f"// Imported from an external package; original definition "
+                f"lives in that package's source.\n"
+            )
 
     if source is None:
         return jsonify({"error": "source not found"}), 404

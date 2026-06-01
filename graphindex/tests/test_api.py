@@ -83,3 +83,33 @@ def test_node_source_file_with_empty_compsrc(client, cfg, monkeypatch):
 def test_node_source_unknown_returns_404(client):
     r = client.get("/api/node/does-not-exist/source")
     assert r.status_code == 404
+
+
+def test_node_source_external_returns_placeholder(client, cfg):
+    """External / unresolved-import nodes have no in-repo source. The endpoint
+    must return 200 with a placeholder body instead of 404 so the editor
+    shows a friendly message rather than an error overlay."""
+    from graphindex.graph.model import NodeKind
+    from graphindex.storage.db import GraphDB
+    db = GraphDB(cfg.db_path)
+    # Find a node that has an external import edge so we know the resolver
+    # already produced at least one EXTERNAL node. The fixture repo imports
+    # nothing external, so seed one to exercise the path.
+    try:
+        from graphindex.graph.model import make_node_id
+        ext_id = make_node_id(NodeKind.EXTERNAL.value, "<external>", "Enum")
+        # Use raw insert to keep this test self-contained.
+        db.conn.execute(
+            "INSERT OR IGNORE INTO nodes(id, kind, name, path, language) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (ext_id, NodeKind.EXTERNAL.value, "Enum", "<external>", ""),
+        )
+        db.conn.commit()
+    finally:
+        db.close()
+
+    r = client.get(f"/api/node/{ext_id}/source")
+    assert r.status_code == 200, r.get_json()
+    body = r.get_json()["source"]
+    assert "Enum" in body
+    assert "External symbol" in body

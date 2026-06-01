@@ -54,6 +54,13 @@ jobs:
           ls -la "$wix_bin" | head -5
           "$wix_bin\candle.exe" -?
 
+      - name: Build frontend
+        shell: pwsh
+        run: |
+          Set-Location graphindex\frontend
+          npm ci
+          npm run build
+
       - name: Build the graphindex MSI
         shell: pwsh
         env:
@@ -66,6 +73,7 @@ jobs:
         run: |
           python -m graphindex.installer.build_msi `
             --extras "${{ github.event.inputs.extras || 'llama,faiss,mcp' }}" `
+            --skip-frontend `
             --output dist
 
       - name: Show produced MSI

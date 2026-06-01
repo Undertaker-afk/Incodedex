@@ -97,11 +97,97 @@ GRAMMARS: dict[str, GrammarSpec] = {
         callee_field="function",
     ),
     "ruby": GrammarSpec(
-        def_types={"method": "method", "class": "class", "module": "class"},
+        def_types={"method": "method", "class": "class", "module": "class", "singleton_method": "method"},
         class_types={"class", "module"},
         call_types={"call", "method_call"},
         import_types={"call"},  # require statements look like calls; handled loosely
         callee_field="method",
+    ),
+    "c": GrammarSpec(
+        def_types={"function_definition": "function", "struct_specifier": "class", "enum_specifier": "class"},
+        class_types={"struct_specifier", "enum_specifier"},
+        call_types={"call_expression"},
+        import_types={"preproc_include"},
+    ),
+    "cpp": GrammarSpec(
+        def_types={
+            "function_definition": "function",
+            "class_specifier": "class",
+            "struct_specifier": "class",
+            "enum_specifier": "class",
+            "namespace_definition": "module",
+        },
+        class_types={"class_specifier", "struct_specifier", "enum_specifier"},
+        call_types={"call_expression"},
+        import_types={"preproc_include"},
+    ),
+    "c_sharp": GrammarSpec(
+        def_types={
+            "method_declaration": "method",
+            "class_declaration": "class",
+            "interface_declaration": "interface",
+            "struct_declaration": "class",
+            "enum_declaration": "class",
+            "namespace_declaration": "module",
+        },
+        class_types={"class_declaration", "interface_declaration", "struct_declaration"},
+        call_types={"invocation_expression", "object_creation_expression"},
+        import_types={"using_directive"},
+        name_field="name",
+    ),
+    "php": GrammarSpec(
+        def_types={
+            "function_definition": "function",
+            "method_declaration": "method",
+            "class_declaration": "class",
+            "interface_declaration": "interface",
+            "trait_declaration": "interface",
+        },
+        class_types={"class_declaration", "interface_declaration", "trait_declaration"},
+        call_types={"function_call_expression", "member_call_expression", "object_creation_expression"},
+        import_types={"include_expression", "require_expression", "namespace_use_declaration"},
+        name_field="name",
+    ),
+    "zig": GrammarSpec(
+        def_types={
+            "function_declaration": "function",
+            "variable_declaration": "class",
+        },
+        class_types={"variable_declaration"},
+        call_types={"call_expression"},
+    ),
+    "kotlin": GrammarSpec(
+        def_types={
+            "function_declaration": "function",
+            "class_declaration": "class",
+            "object_declaration": "class",
+            "interface_declaration": "interface",
+        },
+        class_types={"class_declaration", "object_declaration", "interface_declaration"},
+        call_types={"call_expression"},
+        import_types={"import_header"},
+    ),
+    "bash": GrammarSpec(
+        def_types={"function_definition": "function"},
+        call_types={"command"},
+    ),
+    "dart": GrammarSpec(
+        def_types={
+            "function_signature": "function",
+            "class_definition": "class",
+            "enum_declaration": "class",
+        },
+        class_types={"class_definition", "enum_declaration"},
+        call_types={"call_expression"},
+        import_types={"import_directive"},
+    ),
+    "lua": GrammarSpec(
+        def_types={"function_definition": "function", "local_function_definition": "function"},
+        call_types={"function_call"},
+    ),
+    "sql": GrammarSpec(
+        def_types={"create_table_statement": "class", "create_view_statement": "class", "create_function_statement": "function"},
+        class_types={"create_table_statement", "create_view_statement"},
     ),
 }
 

@@ -36,6 +36,7 @@ from ..parsing.symbols import extract_symbols
 from ..scanner.walker import RepoScanner, current_commit
 from ..storage.db import GraphDB
 from ..storage.vectors import VectorStore
+from ..storage.compsrc import CompSrc
 from ..summarize import get_summarizer
 from . import events as E
 from .events import EventBus
@@ -56,6 +57,7 @@ class Indexer:
         self.bus = bus or EventBus()
         self.cfg.ensure_dirs()
         self.db = GraphDB(cfg.db_path)
+        self.compsrc = CompSrc(cfg.repo_path)
         self.embedder = embedder if embedder is not None else get_embedder(cfg)
         self.dim = getattr(self.embedder, "dim", cfg.embed_dim) or cfg.embed_dim
         self.vectors = VectorStore(cfg.vectors_path, self.dim)
@@ -110,6 +112,9 @@ class Indexer:
             for n in fb.nodes:
                 graph.add_node(n)
                 self._emit_node_add(n)
+                # Cache raw source for all discovered nodes (files and symbols)
+                self.compsrc.store(n.id, n.code or source.decode("utf-8", "ignore"), language=n.language)
+
             for n in fb.nodes:
                 # canonical searchable text (also the embedding input) — stored
                 if n.kind in _EMBEDDABLE:
@@ -154,6 +159,8 @@ class Indexer:
                 try:
                     summary, tags = self.summarizer.summarize(n)
                     n.summary, n.tags = summary, tags
+                    # Update cache with summary
+                    self.compsrc.store(n.id, n.code, summary=n.summary, language=n.language)
                 except Exception:
                     errors += 1
                 n.state = NodeState.SUMMARIZED.value

@@ -16,7 +16,7 @@ from .ast_parser import node_text, parse
 from .grammars import GrammarSpec, get_grammar_spec
 
 _NAME_NODE_TYPES = {"identifier", "type_identifier", "field_identifier",
-                    "constant", "property_identifier", "name"}
+                    "constant", "property_identifier", "name", "variable_identifier"}
 
 
 @dataclass
@@ -101,16 +101,20 @@ def _collect_identifiers(node: Any, source: bytes, out: list[str]) -> None:
 def _extract_bases(node: Any, source: bytes, grammar: str) -> list[str]:
     """Collect base/super types declared by a class-like node."""
     bases: list[str] = []
+    # Try common field names
     for field_name in ("superclasses", "superclass", "interfaces",
-                        "super_interfaces", "trait", "type"):
+                        "super_interfaces", "trait", "type", "base_list"):
         child = node.child_by_field_name(field_name)
         if child is not None:
             _collect_identifiers(child, source, bases)
-    # Generic heuristics for grammars without those fields.
+
+    # Heuristics for common child types
     for c in node.children:
         if c.type in {"class_heritage", "extends_clause", "implements_clause",
-                      "base_class_clause"}:
+                      "base_class_clause", "type_list", "extends_list", "implements_list",
+                      "base_list", "base_clause"}:
             _collect_identifiers(c, source, bases)
+
     # Deduplicate, drop the class's own name handled by caller.
     seen, result = set(), []
     for b in bases:

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { api } from '../api/client'
+import SourceViewer from './SourceViewer'
 
 // Detail panel for a selected node: summary, tags, code intelligence
 // (callers/callees, inheritance, references) resolved from the backend.
@@ -32,7 +33,16 @@ export default function NodeInspector({ nodeId, onSelect }) {
         <span className="iname">{n.name}</span>
       </div>
       <div className="ipath">{n.path}:{n.start_line}</div>
-      {n.signature && <pre className="isig">{n.signature}</pre>}
+
+      {/* Monaco Source Viewer */}
+      <div style={{ marginTop: '10px', marginBottom: '10px' }}>
+        <SourceViewer
+          nodeId={nodeId}
+          language={n.language}
+          onGoToDefinition={(id) => onSelect && onSelect({ id })}
+        />
+      </div>
+
       {n.summary && <p className="isum">{n.summary}</p>}
       {n.tags?.length > 0 && (
         <div className="itags">{n.tags.map((t) => <span key={t} className="tag">{t}</span>)}</div>

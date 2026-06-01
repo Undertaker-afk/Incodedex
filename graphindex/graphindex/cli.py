@@ -15,12 +15,19 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 
 import click
 from rich.console import Console
 from rich.table import Table
 
-from .config import load_config
+try:
+    from graphindex.config import load_config
+except ImportError:  # pragma: no cover
+    root = Path(__file__).resolve().parent.parent
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+    from graphindex.config import load_config
 
 console = Console()
 
@@ -43,7 +50,7 @@ def main() -> None:
 @click.option("--no-embed", is_flag=True, help="Skip embeddings.")
 def index(repo, backend, no_summarize, no_embed):
     """Build/rebuild the index for REPO."""
-    from .pipeline import Indexer, EventBus
+    from graphindex.pipeline import Indexer, EventBus
     cfg = _cfg(repo, backend=backend)
     bus = EventBus()
     last = {"phase": ""}
@@ -78,10 +85,10 @@ def index(repo, backend, no_summarize, no_embed):
 @click.option("--json", "as_json", is_flag=True)
 def search(query, repo, regex, semantic, fuzzy, case, top, as_json):
     """Search the index. Supports filters like lang: kind: path: scope:."""
-    from .storage.db import GraphDB
-    from .storage.vectors import VectorStore
-    from .embedding import get_embedder
-    from .search import SearchEngine, parse_query
+    from graphindex.storage.db import GraphDB
+    from graphindex.storage.vectors import VectorStore
+    from graphindex.embedding import get_embedder
+    from graphindex.search import SearchEngine, parse_query
     cfg = _cfg(repo)
     db = GraphDB(cfg.db_path)
     dim = db.get_meta("embed_dim", cfg.embed_dim) or cfg.embed_dim
@@ -113,11 +120,11 @@ def search(query, repo, regex, semantic, fuzzy, case, top, as_json):
 @click.option("--watch", is_flag=True, help="Also watch for changes.")
 def serve(repo, host, port, backend, watch):
     """Run the API + live WebUI server."""
-    from .api.server import create_app
+    from graphindex.api.server import create_app
     cfg = _cfg(repo, host=host, port=port, backend=backend)
     app, socketio = create_app(cfg)
     if watch:
-        from .watcher import RepoWatcher
+        from graphindex.watcher import RepoWatcher
         state = app.config["GRAPHINDEX_STATE"]
         w = RepoWatcher(cfg, bus=state.bus)
         w.start()
@@ -134,8 +141,8 @@ def serve(repo, host, port, backend, watch):
 def watch(repo, no_summarize):
     """Incrementally re-index REPO on file changes."""
     import time
-    from .watcher import RepoWatcher
-    from .pipeline import EventBus
+    from graphindex.watcher import RepoWatcher
+    from graphindex.pipeline import EventBus
     cfg = _cfg(repo)
     bus = EventBus()
     bus.subscribe(lambda e: console.print(f"  {e.payload.get('message','')}")
@@ -159,10 +166,10 @@ def watch(repo, no_summarize):
 @click.option("--json", "as_json", is_flag=True)
 def ask(question, repo, top, backend, as_json):
     """Ask a grounded question about the codebase (RAG with citations)."""
-    from .storage.db import GraphDB
-    from .storage.vectors import VectorStore
-    from .embedding import get_embedder
-    from .qa import AskEngine, get_chat
+    from graphindex.storage.db import GraphDB
+    from graphindex.storage.vectors import VectorStore
+    from graphindex.embedding import get_embedder
+    from graphindex.qa import AskEngine, get_chat
     cfg = _cfg(repo, backend=backend)
     db = GraphDB(cfg.db_path)
     dim = db.get_meta("embed_dim", cfg.embed_dim) or cfg.embed_dim
@@ -200,10 +207,10 @@ def extended_ask(question, repo, rounds, agents, keyword_rounds, backend, as_jso
     """Multi-agent deep investigation: keyword rounds -> parallel search agents
     that read the index + source -> grounded answer. Built to let a coding agent
     understand a codebase while spending minimal tokens."""
-    from .storage.db import GraphDB
-    from .storage.vectors import VectorStore
-    from .embedding import get_embedder
-    from .qa import ExtendedAsk, get_chat
+    from graphindex.storage.db import GraphDB
+    from graphindex.storage.vectors import VectorStore
+    from graphindex.embedding import get_embedder
+    from graphindex.qa import ExtendedAsk, get_chat
     cfg = _cfg(repo, backend=backend)
     db = GraphDB(cfg.db_path)
     dim = db.get_meta("embed_dim", cfg.embed_dim) or cfg.embed_dim
@@ -219,7 +226,7 @@ def extended_ask(question, repo, rounds, agents, keyword_rounds, backend, as_jso
             console.print(f"  [green]agent[/green] {p.get('focus','')[:60]} → "
                           f"{p.get('findings','')[:80]}")
 
-    from .pipeline import EventBus
+    from graphindex.pipeline import EventBus
     bus = EventBus(); bus.subscribe(on)
     eng = ExtendedAsk(cfg, db, vs, get_embedder(cfg), chat=get_chat(cfg), bus=bus,
                       keyword_rounds=keyword_rounds, agents_per_round=agents,
@@ -244,11 +251,11 @@ def extended_ask(question, repo, rounds, agents, keyword_rounds, backend, as_jso
 @click.option("--json", "as_json", is_flag=True)
 def stats(repo, as_json):
     """Show language / dependency / dead-code / health stats."""
-    from .storage.db import GraphDB
-    from .analysis.languages import language_breakdown
-    from .analysis.dependencies import dependency_graph
-    from .analysis.deadcode import find_dead_code
-    from .analysis.health import health_report
+    from graphindex.storage.db import GraphDB
+    from graphindex.analysis.languages import language_breakdown
+    from graphindex.analysis.dependencies import dependency_graph
+    from graphindex.analysis.deadcode import find_dead_code
+    from graphindex.analysis.health import health_report
     cfg = _cfg(repo)
     db = GraphDB(cfg.db_path)
     report = {
@@ -276,9 +283,9 @@ def stats(repo, as_json):
 @click.argument("repo", default=".")
 def prune(repo):
     """Remove nodes/edges/vectors for deleted files."""
-    from .storage.db import GraphDB
-    from .storage.vectors import VectorStore
-    from .analysis.health import prune_deleted_files
+    from graphindex.storage.db import GraphDB
+    from graphindex.storage.vectors import VectorStore
+    from graphindex.analysis.health import prune_deleted_files
     cfg = _cfg(repo)
     db = GraphDB(cfg.db_path)
     dim = db.get_meta("embed_dim", cfg.embed_dim) or cfg.embed_dim
@@ -292,7 +299,7 @@ def prune(repo):
 @click.argument("repo", default=".")
 def setup(repo):
     """Install the llama.cpp runtime and download the GGUF models."""
-    from .engine.bootstrap import ensure_engine
+    from graphindex.engine.bootstrap import ensure_engine
     cfg = _cfg(repo)
     console.print("Installing llama.cpp runtime + downloading models … (may take a while)")
     status = ensure_engine(cfg)
@@ -303,7 +310,7 @@ def setup(repo):
 @click.argument("repo", default=".")
 def mcp(repo):
     """Run the MCP server over stdio."""
-    from .api import mcp_server
+    from graphindex.api import mcp_server
     cfg = _cfg(repo)
     try:
         mcp_server.run(cfg)

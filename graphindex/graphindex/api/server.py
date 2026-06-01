@@ -79,7 +79,7 @@ def create_app(cfg: Config):
                 if backend:
                     run_cfg = Config(**{**cfg.__dict__})
                     run_cfg.backend = backend
-                indexer = Indexer(run_cfg, bus=state.bus,
+                indexer = Indexer(run_cfg, bus=state.bus, compsrc=state.compsrc,
                                   do_summarize=do_summarize, do_embed=do_embed)
                 indexer.index()
                 indexer.db.close()

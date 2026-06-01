@@ -15,6 +15,7 @@ from ..qa import AskEngine, ExtendedAsk, get_chat
 from ..search import SearchEngine
 from ..storage.db import GraphDB
 from ..storage.vectors import VectorStore
+from ..storage.compsrc import CompSrc
 
 
 class AppState:
@@ -28,6 +29,7 @@ class AppState:
         self.asking = False
         self.watcher = None
         self.last_extended = None
+        self.compsrc = CompSrc(cfg.repo_path)
         self._open()
 
     def _open(self) -> None:

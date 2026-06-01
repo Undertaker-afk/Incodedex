@@ -58,6 +58,19 @@ def _first_name(node: Any, source: bytes, name_field: str) -> str:
         # For dotted names take the last component.
         text = node_text(child, source)
         return text.split(".")[-1].split("::")[-1].strip()
+    # Special cases for certain grammars
+    if node.type == "variable_declaration" and "identifier" in [c.type for c in node.children]:
+        for c in node.children:
+            if c.type == "identifier":
+                return node_text(c, source)
+    if node.type in {"create_table", "create_view", "create_function"}:
+        # SQL identifiers often in object_reference or just identifier
+        for c in node.children:
+            if c.type == "object_reference":
+                return node_text(c, source).strip('"').strip('`')
+            if c.type == "identifier":
+                 return node_text(c, source).strip('"').strip('`')
+
     # Fallback: first identifier-like descendant.
     for c in node.children:
         if c.type in _NAME_NODE_TYPES:
@@ -112,7 +125,7 @@ def _extract_bases(node: Any, source: bytes, grammar: str) -> list[str]:
     for c in node.children:
         if c.type in {"class_heritage", "extends_clause", "implements_clause",
                       "base_class_clause", "type_list", "extends_list", "implements_list",
-                      "base_list", "base_clause"}:
+                      "base_list", "base_clause", "delegation_specifiers"}:
             _collect_identifiers(c, source, bases)
 
     # Deduplicate, drop the class's own name handled by caller.
@@ -150,6 +163,7 @@ def _import_modules(node: Any, source: bytes, grammar: str) -> list[str]:
 
     # Python `from X import a, b`: only X is the module/dependency.
     if node.type == "import_from_statement":
+        # Check child by field name "module_name"
         mod = node.child_by_field_name("module_name")
         if mod is not None:
             txt = node_text(mod, source).strip()
@@ -159,7 +173,8 @@ def _import_modules(node: Any, source: bytes, grammar: str) -> list[str]:
     for c in node.children:
         if c.type in {"dotted_name", "scoped_identifier", "import_spec",
                       "string", "interpreted_string_literal", "string_literal",
-                      "scoped_use_list", "use_wildcard", "string_fragment"}:
+                      "scoped_use_list", "use_wildcard", "string_fragment",
+                      "user_type", "qualified_identifier"}:
             txt = node_text(c, source).strip("\"'`;")
             if txt:
                 mods.append(txt.split()[0])
@@ -182,6 +197,14 @@ def _import_modules(node: Any, source: bytes, grammar: str) -> list[str]:
     return [m for m in dict.fromkeys(mods) if m]
 
 
+def _is_zig_class(node: Any, source: bytes) -> bool:
+    """Heuristic to check if a Zig variable_declaration is a class/struct."""
+    for child in node.children:
+        if child.type in {"struct_declaration", "enum_declaration", "union_declaration"}:
+            return True
+    return False
+
+
 def extract_symbols(grammar: str, source: bytes) -> ParsedFile:
     spec = get_grammar_spec(grammar)
     tree = parse(grammar, source)
@@ -195,9 +218,19 @@ def extract_symbols(grammar: str, source: bytes) -> ParsedFile:
         ntype = node.type
         new_scope = scope
 
-        if ntype in spec.def_types:
+        # Special Zig class detection
+        is_def = ntype in spec.def_types
+        kind = spec.def_types.get(ntype)
+
+        if grammar == "zig" and ntype == "variable_declaration":
+             if _is_zig_class(node, source):
+                 is_def = True
+                 kind = "class"
+             else:
+                 is_def = False
+
+        if is_def:
             name = _first_name(node, source, spec.name_field)
-            kind = spec.def_types[ntype]
             # function defined inside a class becomes a method
             if kind == "function" and scope is not None and scope.kind in {
                     "class", "interface"}:
@@ -213,7 +246,7 @@ def extract_symbols(grammar: str, source: bytes) -> ParsedFile:
                 parent=scope.qualified_name if scope else None,
                 code=node_text(node, source),
             )
-            if ntype in spec.class_types:
+            if kind == "class" or ntype in spec.class_types:
                 sym.bases = [b for b in _extract_bases(node, source, grammar) if b != name]
             pf.symbols.append(sym)
             new_scope = sym

@@ -152,8 +152,11 @@ GRAMMARS: dict[str, GrammarSpec] = {
         def_types={
             "function_declaration": "function",
             "variable_declaration": "class",
+            "struct_declaration": "class",
+            "enum_declaration": "class",
+            "union_declaration": "class",
         },
-        class_types={"variable_declaration"},
+        class_types={"struct_declaration", "enum_declaration", "union_declaration"},
         call_types={"call_expression"},
     ),
     "kotlin": GrammarSpec(
@@ -165,7 +168,8 @@ GRAMMARS: dict[str, GrammarSpec] = {
         },
         class_types={"class_declaration", "object_declaration", "interface_declaration"},
         call_types={"call_expression"},
-        import_types={"import_header"},
+        import_types={"import_header", "import"},
+        callee_field="function",
     ),
     "bash": GrammarSpec(
         def_types={"function_definition": "function"},
@@ -182,12 +186,39 @@ GRAMMARS: dict[str, GrammarSpec] = {
         import_types={"import_directive"},
     ),
     "lua": GrammarSpec(
-        def_types={"function_definition": "function", "local_function_definition": "function"},
+        def_types={"function_declaration": "function", "local_function_declaration": "function"},
         call_types={"function_call"},
     ),
     "sql": GrammarSpec(
-        def_types={"create_table_statement": "class", "create_view_statement": "class", "create_function_statement": "function"},
-        class_types={"create_table_statement", "create_view_statement"},
+        def_types={
+            "create_table": "class",
+            "create_view": "class",
+            "create_function": "function",
+        },
+        class_types={"create_table", "create_view"},
+    ),
+    "swift": GrammarSpec(
+        def_types={"function_declaration": "function", "class_declaration": "class", "struct_declaration": "class", "protocol_declaration": "interface"},
+        class_types={"class_declaration", "struct_declaration", "protocol_declaration"},
+        call_types={"call_expression"},
+    ),
+    "scala": GrammarSpec(
+        def_types={"function_definition": "function", "class_definition": "class", "object_definition": "class", "trait_definition": "interface"},
+        class_types={"class_definition", "object_definition", "trait_definition"},
+        call_types={"call_expression"},
+    ),
+    "haskell": GrammarSpec(
+        def_types={"signature": "function", "function_declaration": "function", "data_declaration": "class"},
+        class_types={"data_declaration"},
+    ),
+    "elixir": GrammarSpec(
+        def_types={"call": "function"},
+        call_types={"call"},
+    ),
+    "julia": GrammarSpec(
+        def_types={"function_definition": "function", "struct_definition": "class"},
+        class_types={"struct_definition"},
+        call_types={"call_expression"},
     ),
 }
 

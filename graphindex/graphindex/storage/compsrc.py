@@ -7,7 +7,7 @@ in a dedicated cache directory.
 from __future__ import annotations
 
 import json
-import os
+import hashlib
 import zlib
 from pathlib import Path
 
@@ -15,28 +15,60 @@ from pathlib import Path
 class CompSrc:
     def __init__(self, root_dir: str | Path):
         self.root = Path(root_dir) / ".graphindex" / "compsrc"
-        self.root.mkdir(parents=True, exist_ok=True)
+        self._batch: dict[str, dict] = {}
+
+    def _safe_id(self, node_id: str) -> str:
+        """Sanitize node_id to prevent path traversal and malformed keys."""
+        # node_id is typically a hex string from make_node_id, but we hash it
+        # to be absolutely certain it's a safe filename.
+        return hashlib.sha256(node_id.encode("utf-8")).hexdigest()
 
     def _path(self, node_id: str) -> Path:
-        return self.root / f"{node_id}.json.z"
+        return self.root / f"{self._safe_id(node_id)}.json.z"
 
-    def store(self, node_id: str, code: str, summary: str = "", language: str = "") -> None:
+    def store(self, node_id: str, code: str | None, summary: str = "", language: str = "") -> None:
         """Store compressed source + metadata for a node."""
+        self.root.mkdir(parents=True, exist_ok=True)
         data = {
-            "code": code,
+            "code": code or "",
             "summary": summary,
             "language": language
         }
         raw = json.dumps(data).encode("utf-8")
         compressed = zlib.compress(raw)
-        self._path(node_id).write_bytes(compressed)
+        try:
+            self._path(node_id).write_bytes(compressed)
+        except Exception:
+            pass
+
+    def add_to_batch(self, node_id: str, code: str | None, summary: str = "", language: str = "") -> None:
+        """Buffer a node for batch storage."""
+        self._batch[node_id] = {
+            "code": code or "",
+            "summary": summary,
+            "language": language
+        }
+
+    def flush_batch(self) -> None:
+        """Write all buffered nodes to disk."""
+        if not self._batch:
+            return
+        self.root.mkdir(parents=True, exist_ok=True)
+        for node_id, data in self._batch.items():
+            raw = json.dumps(data).encode("utf-8")
+            compressed = zlib.compress(raw)
+            try:
+                self._path(node_id).write_bytes(compressed)
+            except Exception:
+                continue
+        self._batch.clear()
 
     def retrieve(self, node_id: str) -> dict | None:
         """Retrieve and decompress source for a node."""
-        path = self._path(node_id)
-        if not path.exists():
-            return None
         try:
+            path = self._path(node_id)
+            if not path.exists():
+                return None
             compressed = path.read_bytes()
             raw = zlib.decompress(compressed)
             return json.loads(raw.decode("utf-8"))
@@ -49,9 +81,9 @@ class CompSrc:
         if not data:
             return None
 
-        code = data.get("code", "")
-        summary = data.get("summary", "")
-        lang = data.get("language", "").lower()
+        code = data.get("code") or ""
+        summary = data.get("summary") or ""
+        lang = (data.get("language") or "").lower()
 
         if not summary:
             return code
@@ -67,3 +99,20 @@ class CompSrc:
 
         commented_summary = "\n".join([f"{prefix} {line}" for line in summary.splitlines()])
         return f"{commented_summary}\n\n{code}"
+
+    def prune_stale(self, active_node_ids: set[str]) -> int:
+        """Delete cached files that are not in the active set. Returns count deleted."""
+        if not self.root.exists():
+            return 0
+
+        safe_active_ids = {self._safe_id(nid) for nid in active_node_ids}
+        deleted = 0
+        for p in self.root.glob("*.json.z"):
+            safe_id = p.name.split(".")[0]
+            if safe_id not in safe_active_ids:
+                try:
+                    p.unlink()
+                    deleted += 1
+                except Exception:
+                    pass
+        return deleted

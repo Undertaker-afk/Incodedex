@@ -24,7 +24,6 @@ from ..analysis.languages import language_breakdown
 from ..graph.model import NodeKind
 from ..graph.resolver import (call_hierarchy, find_references, inheritance)
 from ..search import parse_query
-from ..storage.compsrc import CompSrc
 
 bp = Blueprint("api", __name__, url_prefix="/api")
 
@@ -126,8 +125,11 @@ def node_detail(node_id):
 @bp.get("/node/<node_id>/source")
 def node_source(node_id):
     st = _state()
-    cs = CompSrc(st.cfg.repo_path)
-    source = cs.get_source_with_summary(node_id)
+    try:
+        source = st.compsrc.get_source_with_summary(node_id)
+    except ValueError:
+        return jsonify({"error": "invalid node id"}), 400
+
     if source is None:
         # Fallback to DB node code if exists
         n = st.db.get_node(node_id)

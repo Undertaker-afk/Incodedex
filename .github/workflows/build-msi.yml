@@ -64,7 +64,7 @@ jobs:
           # LLM extras (if the wheel drags any in transitively).
           GRAPHINDEX_LLAMA_LOG: error
         run: |
-          python -m installer.build_msi `
+          python -m graphindex.installer.build_msi `
             --extras "${{ github.event.inputs.extras || 'llama,faiss,mcp' }}" `
             --output dist
 

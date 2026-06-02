@@ -45,3 +45,71 @@ def test_node_detail_endpoint(client):
 def test_stats_endpoint(client):
     data = client.get("/api/stats").get_json()
     assert "languages" in data and "dependencies" in data and "dead_code" in data
+
+
+def test_node_source_symbol(client):
+    """Symbol nodes always carry inline `code`, so the endpoint must succeed."""
+    nodes = client.get("/api/graph").get_json()["nodes"]
+    sym = next(n for n in nodes if n["kind"] in {"function", "method", "class"})
+    r = client.get(f"/api/node/{sym['id']}/source")
+    assert r.status_code == 200
+    assert r.get_json()["source"]
+
+
+def test_node_source_file_with_empty_compsrc(client, cfg, monkeypatch):
+    """File nodes have no inline `code`; the endpoint must fall back to disk
+    when the compsrc cache is empty (e.g. a stale index from before file bodies
+    were being cached)."""
+    nodes = client.get("/api/graph").get_json()["nodes"]
+    f = next(n for n in nodes if n["kind"] == "file")
+    # Wipe the compsrc cache for this id and clear any in-memory batch.
+    from graphindex.api.state import AppState
+    app = client.application
+    state: AppState = app.config["GRAPHINDEX_STATE"]
+    p = state.compsrc._path(f["id"])
+    if p.exists():
+        p.unlink()
+    state.compsrc._batch.pop(f["id"], None)
+
+    r = client.get(f"/api/node/{f['id']}/source")
+    assert r.status_code == 200, r.get_json()
+    body = r.get_json()["source"]
+    assert body and body != "source not found"
+    # The body should look like the on-disk file (not a "not found" stub).
+    on_disk = (cfg.repo_path / f["path"]).read_text(encoding="utf-8", errors="replace")
+    assert body.strip() == on_disk.strip()
+
+
+def test_node_source_unknown_returns_404(client):
+    r = client.get("/api/node/does-not-exist/source")
+    assert r.status_code == 404
+
+
+def test_node_source_external_returns_placeholder(client, cfg):
+    """External / unresolved-import nodes have no in-repo source. The endpoint
+    must return 200 with a placeholder body instead of 404 so the editor
+    shows a friendly message rather than an error overlay."""
+    from graphindex.graph.model import NodeKind
+    from graphindex.storage.db import GraphDB
+    db = GraphDB(cfg.db_path)
+    # Find a node that has an external import edge so we know the resolver
+    # already produced at least one EXTERNAL node. The fixture repo imports
+    # nothing external, so seed one to exercise the path.
+    try:
+        from graphindex.graph.model import make_node_id
+        ext_id = make_node_id(NodeKind.EXTERNAL.value, "<external>", "Enum")
+        # Use raw insert to keep this test self-contained.
+        db.conn.execute(
+            "INSERT OR IGNORE INTO nodes(id, kind, name, path, language) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (ext_id, NodeKind.EXTERNAL.value, "Enum", "<external>", ""),
+        )
+        db.conn.commit()
+    finally:
+        db.close()
+
+    r = client.get(f"/api/node/{ext_id}/source")
+    assert r.status_code == 200, r.get_json()
+    body = r.get_json()["source"]
+    assert "Enum" in body
+    assert "External symbol" in body

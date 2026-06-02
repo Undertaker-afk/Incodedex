@@ -51,8 +51,16 @@ class GraphDB:
         self.db_path = str(db_path)
         self._lock = threading.RLock()
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        self.conn = sqlite3.connect(self.db_path, check_same_thread=False,
+                                    timeout=30.0)
         self.conn.row_factory = sqlite3.Row
+        # WAL mode is set in schema.sql, but we also set a busy timeout so a
+        # second writer (e.g. the watcher thread while the main indexer is
+        # mid-parse) waits for the first to commit instead of raising
+        # "database is locked" immediately. The schema's PRAGMA runs first
+        # so journal_mode is already WAL.
+        self.conn.execute("PRAGMA busy_timeout = 30000")
+        self.conn.execute("PRAGMA journal_mode = WAL")
         self.conn.executescript(_SCHEMA)
         self.conn.commit()
 

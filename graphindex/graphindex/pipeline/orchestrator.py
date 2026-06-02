@@ -99,13 +99,16 @@ class Indexer:
         self.bus.emit(E.LOG, message=f"Discovered {len(files)} source files")
 
         self.bus.emit(E.PHASE, phase="parse", message="Parsing & building graph")
-        for rec in files:
+        total = len(files)
+        for i, rec in enumerate(files, start=1):
             try:
                 with open(rec.abs_path, "rb") as fh:   # context-managed: no fd leak
                     source = fh.read()
                 parsed = extract_symbols(rec.grammar, source)
             except Exception:
                 errors += 1
+                self.bus.emit(E.PROGRESS, phase="parse", done=i, total=total,
+                              current=rec.rel_path)
                 continue
             fb = build_file(rec, parsed, commit=self.commit)
             # announce discovered (gray), then mark parsed (yellow)
@@ -131,6 +134,12 @@ class Indexer:
             all_refs.extend(fb.refs)
             self.db.upsert_file(rec.rel_path, rec.language, rec.size, rec.mtime,
                                 rec.sha, self.commit)
+            self.bus.emit(E.PROGRESS, phase="parse", done=i, total=total,
+                          current=rec.rel_path)
+        # Release the write lock acquired by the per-file upserts so other
+        # writers (the watcher thread, a concurrent API-driven re-index) don't
+        # have to wait for the full embed/summarize pass to finish.
+        self.db.commit()
 
         # Flush CompSrc batch after parsing
         self.compsrc.flush_batch()
@@ -162,7 +171,8 @@ class Indexer:
         summarizable = [n for n in graph.nodes.values() if n.kind in _SUMMARIZABLE]
         if self.do_summarize and summarizable:
             self.bus.emit(E.PHASE, phase="summarize", message="Summarizing & tagging")
-            for n in summarizable:
+            total = len(summarizable)
+            for i, n in enumerate(summarizable, start=1):
                 try:
                     summary, tags = self.summarizer.summarize(n)
                     n.summary, n.tags = summary, tags
@@ -175,6 +185,8 @@ class Indexer:
                     errors += 1
                 n.state = NodeState.SUMMARIZED.value
                 self._emit_node_update(n)
+                self.bus.emit(E.PROGRESS, phase="summarize", done=i, total=total,
+                              current=n.name)
             self.compsrc.flush_batch()
 
         # ---- analysis overlays: duplicates + dead code (purple outline) ----
@@ -226,14 +238,20 @@ class Indexer:
     # -- embedding --------------------------------------------------------
     def _embed_nodes(self, nodes: list[Node]) -> None:
         batch = max(1, self.cfg.embed_batch)
+        total = len(nodes)
+        done = 0
         for i in range(0, len(nodes), batch):
             chunk = nodes[i:i + batch]
             texts = [n.search_string or embedding_text(n) for n in chunk]
             try:
                 mat = self.embedder.embed(texts)
             except Exception:
+                done += len(chunk)
+                self.bus.emit(E.PROGRESS, phase="embed", done=done, total=total)
                 continue
             for n, vec in zip(chunk, mat):
                 self.vectors.add(n.id, np.asarray(vec, dtype="float32"))
                 n.state = NodeState.EMBEDDED.value
                 self._emit_node_update(n)
+            done += len(chunk)
+            self.bus.emit(E.PROGRESS, phase="embed", done=done, total=total)

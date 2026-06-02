@@ -21,7 +21,12 @@ export default function SourceViewer({ nodeId, language, onGoToDefinition }) {
         setLoading(false);
       })
       .catch(err => {
-        setSource('// Error loading source\n' + err.message);
+        // Surface the actual error message (HTTP status + body if available)
+        // so 404 / "source not found" / 500s are visible instead of being
+        // collapsed into a generic "Error loading source" line.
+        const status = err?.status ?? '';
+        const body = err?.body?.error || err?.message || String(err);
+        setSource(`// Error loading source (${status})\n// ${body}`);
         setLoading(false);
       });
   }, [nodeId]);

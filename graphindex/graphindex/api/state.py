@@ -85,6 +85,14 @@ class AppState:
                           search_engine=search_engine, chat=chat,
                           ask_engine=ask_engine)
 
+    def ensure_chat(self):
+        """Retry chat-model discovery and keep AskEngine wired to it."""
+        if self.chat is None:
+            self.chat = get_chat(self.cfg)
+            self.ask_engine = AskEngine(self.cfg, self.db, self.vectors,
+                                        self.embedder, chat=self.chat)
+        return self.chat
+
     def build_extended(self, opts: dict, bus) -> ExtendedAsk:
         """Construct an ExtendedAsk orchestrator with caps from the request.
 

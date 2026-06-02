@@ -17,6 +17,7 @@ export function useGraphStream() {
   const [stats, setStats] = useState(null)
   const [indexing, setIndexing] = useState(false)
   const [logLine, setLogLine] = useState('')
+  const [progress, setProgress] = useState(null) // {phase, done, total, current}
   const nodeMap = useRef(new Map())
   const linkSet = useRef(new Set())
   const linksRef = useRef([])
@@ -68,10 +69,11 @@ export function useGraphStream() {
           break
         }
         case 'phase': setPhase(evt.message || evt.phase); setIndexing(true); break
+        case 'progress': setProgress({ phase: evt.phase, done: evt.done, total: evt.total, current: evt.current || '' }); break
         case 'log': setLogLine(evt.message || ''); break
         case 'stats': setStats(evt); break
         case 'done':
-          setStats(evt); setIndexing(false); setPhase('done')
+          setStats(evt); setIndexing(false); setPhase('done'); setProgress(null)
           dirty.current = true
           setTimeout(() => loadInitial().catch(() => {}), 200)
           break
@@ -86,5 +88,5 @@ export function useGraphStream() {
     return () => { socket.close(); clearInterval(timer) }
   }, [loadInitial, commit])
 
-  return { nodes, links, phase, stats, indexing, logLine, reload: loadInitial }
+  return { nodes, links, phase, stats, indexing, logLine, progress, reload: loadInitial }
 }

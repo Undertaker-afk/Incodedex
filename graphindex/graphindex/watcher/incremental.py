@@ -9,9 +9,11 @@ consumes so the live graph updates in place.
 
 from __future__ import annotations
 
+import logging
 import os
 import threading
 import time
+from typing import Callable, Optional
 
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
@@ -22,6 +24,8 @@ from ..pipeline.events import EventBus
 from ..pipeline.orchestrator import Indexer
 from ..scanner.ignore import IgnoreEngine
 from ..scanner.walker import detect_language
+
+log = logging.getLogger(__name__)
 
 
 class _Handler(FileSystemEventHandler):
@@ -39,7 +43,9 @@ class _Handler(FileSystemEventHandler):
 
 class RepoWatcher:
     def __init__(self, cfg: Config, bus: EventBus | None = None,
-                 debounce: float = 1.0, do_summarize: bool = False):
+                 debounce: float = 1.0, do_summarize: bool = False,
+                 index_lock: Optional["threading.Lock"] = None,
+                 on_reload: Optional[Callable[[], None]] = None):
         self.cfg = cfg
         self.bus = bus or EventBus()
         self.debounce = debounce
@@ -49,6 +55,13 @@ class RepoWatcher:
         self._lock = threading.Lock()
         self._timer: threading.Timer | None = None
         self._observer: Observer | None = None
+        # Optional shared single-flight lock: when running inside the API
+        # process the watcher MUST coordinate with the foreground /api/index
+        # runner so they never open the same SQLite/FAISS state concurrently.
+        self._index_lock = index_lock
+        # Callback to invalidate read-side caches (e.g. AppState.reload) once
+        # an incremental update completes, so the WebUI gets fresh data.
+        self._on_reload = on_reload
 
     def _enqueue(self, abs_path: str) -> None:
         try:
@@ -74,23 +87,62 @@ class RepoWatcher:
             self._pending.clear()
         if not changed:
             return
-        self.bus.emit("log", message=f"Incremental update: {len(changed)} file(s)")
-        indexer = Indexer(self.cfg, bus=self.bus, do_summarize=self.do_summarize)
-        # 1) Handle deletions from the changed set FIRST so node_remove events are
-        #    emitted (a blanket prune first would delete the rows, leaving the
-        #    explicit loop nothing to report and the UI graph stale).
-        existing = [c for c in changed if (self.cfg.repo_path / c).exists()]
-        for path in changed:
-            if not (self.cfg.repo_path / path).exists():
-                ids = indexer.db.delete_file(path)
-                indexer.vectors.remove(set(ids))
-                for nid in ids:
-                    self.bus.emit("node_remove", id=nid)
-        # 2) Catch any other files deleted outside the changed set.
-        prune_deleted_files(self.cfg, indexer.db, indexer.vectors)
-        if existing:
-            indexer.index(only_changed=existing)
-        indexer.db.close()
+
+        # Coordinate with the foreground indexer so we never open two writers
+        # on the same DB/vectors at once. If a full re-index is in progress we
+        # re-queue these files and let the next debounce tick try again.
+        lock = self._index_lock
+        if lock is not None and not lock.acquire(blocking=False):
+            with self._lock:
+                self._pending.update(changed)
+                if self._timer:
+                    self._timer.cancel()
+                self._timer = threading.Timer(self.debounce, self._flush)
+                self._timer.daemon = True
+                self._timer.start()
+            return
+
+        try:
+            self.bus.emit("log", message=f"Incremental update: {len(changed)} file(s)")
+            indexer = Indexer(self.cfg, bus=self.bus, do_summarize=self.do_summarize)
+            try:
+                # 1) Handle deletions from the changed set FIRST so node_remove
+                #    events are emitted (a blanket prune first would delete the
+                #    rows, leaving the explicit loop nothing to report and the
+                #    UI graph stale).
+                existing = [c for c in changed if (self.cfg.repo_path / c).exists()]
+                removed_any = False
+                for path in changed:
+                    if not (self.cfg.repo_path / path).exists():
+                        ids = indexer.db.delete_file(path)
+                        if ids:
+                            indexer.vectors.remove(set(ids))
+                            removed_any = True
+                        for nid in ids:
+                            self.bus.emit("node_remove", id=nid)
+                # 2) Catch any other files deleted outside the changed set.
+                #    (prune_deleted_files persists vectors itself when it
+                #    removes any nodes; we only need to handle the case where
+                #    our own loop above removed vectors but prune found nothing.)
+                prune_deleted_files(self.cfg, indexer.db, indexer.vectors)
+                if existing:
+                    indexer.index(only_changed=existing)
+                elif removed_any:
+                    # Indexer.index() is what normally persists vectors. When
+                    # the batch was purely deletions from the changed set, we
+                    # must save here or the removals reappear after a restart.
+                    indexer.vectors.save()
+            finally:
+                indexer.db.close()
+            if self._on_reload:
+                try:
+                    self._on_reload()
+                except Exception as exc:
+                    log.exception("on_reload callback failed: %s", exc)
+                    self.bus.emit("log", message=f"reload failed: {exc}")
+        finally:
+            if lock is not None:
+                lock.release()
 
     def start(self) -> None:
         self._observer = Observer()

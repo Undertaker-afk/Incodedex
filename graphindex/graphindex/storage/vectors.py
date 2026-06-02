@@ -9,6 +9,7 @@ mapping are persisted to ``vectors_path`` and reloaded on startup.
 from __future__ import annotations
 
 import json
+import threading
 from pathlib import Path
 
 import numpy as np
@@ -38,6 +39,10 @@ class VectorStore:
         self._matrix: np.ndarray = np.zeros((0, dim), dtype="float32")
         self._index = faiss.IndexFlatIP(dim) if _HAS_FAISS else None
         self.backend = "faiss" if _HAS_FAISS else "numpy"
+        # Serialize mutation/query so the watcher (incremental updates) and the
+        # main indexer / API search calls cannot corrupt the ids ↔ matrix
+        # mapping by interleaving ``add``/``remove``/``search``.
+        self._lock = threading.RLock()
         self._load()
 
     # -- persistence ------------------------------------------------------
@@ -49,6 +54,14 @@ class VectorStore:
     def _vec_file(self) -> Path:
         return self.path / "vectors.npy"
 
+    def _reset_state(self) -> None:
+        """Reset to an empty store in a consistent way (used on load failures)."""
+        self.ids = []
+        self._id_to_idx = {}
+        self._matrix = np.zeros((0, self.dim), dtype="float32")
+        if self._index is not None:
+            self._index.reset()
+
     def _load(self) -> None:
         if self._ids_file.exists() and self._vec_file.exists():
             try:
@@ -57,42 +70,55 @@ class VectorStore:
                 # _matrix end up inconsistent (silent corruption / IndexError).
                 mat = np.load(self._vec_file)
                 if mat.shape[1] != self.dim and mat.size:
-                    return  # dimension mismatch -> start fresh
+                    self._reset_state()
+                    return
                 self.ids = json.loads(self._ids_file.read_text())
                 self._id_to_idx = {nid: i for i, nid in enumerate(self.ids)}
                 self._matrix = mat.astype("float32")
                 if self._index is not None and len(self.ids):
+                    self._index.reset()
                     self._index.add(self._matrix)
             except Exception:
-                self.ids, self._id_to_idx = [], {}
-                self._matrix = np.zeros((0, self.dim), dtype="float32")
+                self._reset_state()
 
     def save(self) -> None:
-        self._ids_file.write_text(json.dumps(self.ids))
-        np.save(self._vec_file, self._matrix)
+        with self._lock:
+            self._ids_file.write_text(json.dumps(self.ids))
+            np.save(self._vec_file, self._matrix)
 
     # -- mutation ---------------------------------------------------------
     def add(self, node_id: str, vector: np.ndarray | list[float]) -> None:
-        vec = _normalize(np.asarray(vector, dtype="float32").reshape(1, -1))
-        idx = self._id_to_idx.get(node_id)
-        if idx is not None:
-            self._matrix[idx] = vec[0]
-            self._rebuild_faiss()
-            return
-        self._id_to_idx[node_id] = len(self.ids)
-        self.ids.append(node_id)
-        self._matrix = np.vstack([self._matrix, vec]) if self._matrix.size else vec
-        if self._index is not None:
-            self._index.add(vec)
+        raw = np.asarray(vector, dtype="float32").reshape(1, -1)
+        # Validate dimension BEFORE mutating any state so a bad input cannot
+        # leave ids / _id_to_idx / _matrix / FAISS index in an inconsistent
+        # state (which would later surface as a cryptic IndexError).
+        if raw.shape[1] != self.dim:
+            raise ValueError(
+                f"VectorStore.add: dimension mismatch (got {raw.shape[1]}, "
+                f"expected {self.dim})")
+        vec = _normalize(raw)
+        with self._lock:
+            idx = self._id_to_idx.get(node_id)
+            if idx is not None:
+                self._matrix[idx] = vec[0]
+                self._rebuild_faiss()
+                return
+            self._id_to_idx[node_id] = len(self.ids)
+            self.ids.append(node_id)
+            self._matrix = np.vstack([self._matrix, vec]) if self._matrix.size else vec
+            if self._index is not None:
+                self._index.add(vec)
 
     def remove(self, node_ids: set[str]) -> None:
         if not node_ids:
             return
-        keep = [i for i, nid in enumerate(self.ids) if nid not in node_ids]
-        self.ids = [self.ids[i] for i in keep]
-        self._id_to_idx = {nid: i for i, nid in enumerate(self.ids)}
-        self._matrix = self._matrix[keep] if keep else np.zeros((0, self.dim), dtype="float32")
-        self._rebuild_faiss()
+        with self._lock:
+            keep = [i for i, nid in enumerate(self.ids) if nid not in node_ids]
+            self.ids = [self.ids[i] for i in keep]
+            self._id_to_idx = {nid: i for i, nid in enumerate(self.ids)}
+            self._matrix = (self._matrix[keep] if keep
+                            else np.zeros((0, self.dim), dtype="float32"))
+            self._rebuild_faiss()
 
     def get_vector(self, node_id: str) -> np.ndarray | None:
         """Return the stored (normalized) vector for ``node_id`` or None.
@@ -100,8 +126,10 @@ class VectorStore:
         Public accessor so callers (e.g. duplicate detection) don't reach into
         ``_matrix``/``ids`` internals.
         """
-        idx = self._id_to_idx.get(node_id)
-        return None if idx is None else self._matrix[idx]
+        with self._lock:
+            idx = self._id_to_idx.get(node_id)
+            # copy so callers can't mutate the stored row via a view
+            return None if idx is None else self._matrix[idx].copy()
 
     def _rebuild_faiss(self) -> None:
         if self._index is None:
@@ -113,16 +141,24 @@ class VectorStore:
     # -- query ------------------------------------------------------------
     def search(self, vector: np.ndarray | list[float], top_k: int = 20
                ) -> list[tuple[str, float]]:
-        if not self.ids:
-            return []
-        q = _normalize(np.asarray(vector, dtype="float32").reshape(1, -1))
-        k = min(top_k, len(self.ids))
-        if self._index is not None:
-            scores, idxs = self._index.search(q, k)
-            return [(self.ids[i], float(s)) for i, s in zip(idxs[0], scores[0]) if i >= 0]
-        sims = (self._matrix @ q[0])
-        order = np.argsort(-sims)[:k]
-        return [(self.ids[i], float(sims[i])) for i in order]
+        raw = np.asarray(vector, dtype="float32").reshape(1, -1)
+        if raw.shape[1] != self.dim:
+            raise ValueError(
+                f"VectorStore.search: dimension mismatch (got {raw.shape[1]}, "
+                f"expected {self.dim})")
+        q = _normalize(raw)
+        with self._lock:
+            if not self.ids:
+                return []
+            k = min(top_k, len(self.ids))
+            if self._index is not None:
+                scores, idxs = self._index.search(q, k)
+                return [(self.ids[i], float(s))
+                        for i, s in zip(idxs[0], scores[0]) if i >= 0]
+            sims = (self._matrix @ q[0])
+            order = np.argsort(-sims)[:k]
+            return [(self.ids[i], float(sims[i])) for i in order]
 
     def __len__(self) -> int:
-        return len(self.ids)
+        with self._lock:
+            return len(self.ids)

@@ -204,7 +204,10 @@ def serve(repo, host, port, backend, watch):
     if watch:
         from graphindex.watcher import RepoWatcher
         state = app.config["GRAPHINDEX_STATE"]
-        w = RepoWatcher(cfg, bus=state.bus)
+        # Share the API's single-flight index_lock so the watcher and the
+        # foreground /api/index runner never collide on the same DB/vectors.
+        w = RepoWatcher(cfg, bus=state.bus, index_lock=state.index_lock,
+                        on_reload=state.reload)
         w.start()
         state.watcher = w
     url = f"http://{cfg.host}:{cfg.port}"
